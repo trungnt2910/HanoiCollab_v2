@@ -1,0 +1,33 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Generate AppSettings
+        run: |
+          $appsettings_byte = [System.Convert]::FromBase64String("${{ secrets.APPSETTINGS }}")
+          $currentDirectory = Get-Location
+          $appsettings_path = Join-Path -Path $currentDirectory -ChildPath "HanoiCollab_v2" -AdditionalChildPath "appsettings.json"
+          [IO.File]::WriteAllBytes("$appsettings_path", $appsettings_byte)
+          Remove-Item ".gitignore" -Force
+          git config --global user.email "${{ github.actor }}@users.noreply.github.com"
+          git config --global user.name "${{ github.actor }}"
+          git add .
+          git commit --amend --no-edit
+        shell: pwsh
+
+      - uses: akhileshns/heroku-deploy@v3.12.12 # This is the action
+        with:
+          heroku_api_key: ${{secrets.HEROKU_API_KEY}}
+          heroku_app_name: "hanoicollab" #Must be unique in Heroku
+          heroku_email: ${{secrets.HEROKU_EMAIL}}
+          buildpack: "https://github.com/jincod/dotnetcore-buildpack.git"
+          branch: master
