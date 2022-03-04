@@ -284,11 +284,12 @@ async function SetupChatConnection()
         {
             return;
         }
-        console.log("Reconnecting...");
-        setTimeout(async function()
+        console.log("Reconnecting to chat channel...");
+        var handle = setInterval(async function()
         {
             await connection.start();
             await HanoiCollabGlobals.ChatConnection.invoke("JoinChannel", HanoiCollabGlobals.Channel);
+            clearInterval(handle);
         }, 5000);
     });
 
@@ -801,7 +802,7 @@ function GetQuestions()
 
                 info.CommunityAnswersHtml.querySelector("select").addEventListener("change", function()
                 {
-                    UpdateWrittenSelect(this);
+                    info.UpdateWrittenSelect(this);
                 });
 
                 info.SendUserAnswer = async function(answer)
@@ -1038,10 +1039,11 @@ async function SetupExamConnection()
             return;
         }
         console.log("Reconnecting...");
-        setTimeout(async function()
+        var handle = setInterval(async function()
         {
             await connection.start();
-            await HanoiCollabGlobals.AnswerShareConnection.invoke("JoinExam", GetFormId());
+            await HanoiCollabGlobals.ExamConnection.invoke("JoinExam", GetFormId());
+            clearInterval(handle);
         }, 5000);
     });
 
