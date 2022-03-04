@@ -19,6 +19,17 @@
 // @match        https://azota.vn/*
 // ==/UserScript==
 
+String.prototype.getHashCode = function() {
+    var hash = 0, i, chr;
+    if (this.length === 0) return hash;
+    for (i = 0; i < this.length; i++) {
+        chr   = this.charCodeAt(i);
+        hash  = ((hash << 5) - hash) + chr;
+        hash |= 0; // Convert to 32bit integer
+    }
+    return hash.toString();
+};
+
 let HanoiCollabGlobals = {};
 
 function HanoiCollab$(obj)
@@ -420,6 +431,12 @@ HanoiCollabScriptPatches = {
     },
     "forms.office.com": function(src, code)
     {
+        if (src.includes("page.min"))
+        {
+            code = code
+                .replace("return(e=e||c.length!==Object.keys(n).length)?i:n", "return(e=e||c.length!==Object.keys(n).length)?(function(i){window.HanoiCollabExposedVariables=window.HanoiCollabExposedVariables||[];window.HanoiCollabExposedVariables.FormState=i;return i})(i):n")
+                .replace("function f(n){var r=(0,o.cF)", "function f(n){window.HanoiCollabExposedVariables=window.HanoiCollabExposedVariables||[];window.HanoiCollabExposedVariables.UpdateLocalStorage=f;var r=(0,o.cF)");
+        }
         return code;
     }
 };
@@ -637,6 +654,32 @@ async function WaitForTestReady()
                 }, 1000);
             }
             break;
+            case "forms.office.com":
+            {
+                if (!top.window.location.href.includes("Pages/ResponsePage.aspx"))
+                {
+                    resolve(false);
+                    return;
+                }
+                var hadFormState = false;
+                var interval = setInterval(function()
+                {
+                    if (!hadFormState)
+                    {
+                        if (HanoiCollabGlobals.Window.HanoiCollabExposedVariables && HanoiCollabGlobals.Window.HanoiCollabExposedVariables.FormState)
+                        {
+                            hadFormState = true;
+                        }
+                    }
+                    else if (HanoiCollab$(".office-form-question-content").length)
+                    {
+                        clearInterval(interval);
+                        resolve(true);
+                        return;
+                    }
+                }, 1000);
+            }
+            break;
             default:
                 resolve(false);
         }
@@ -649,10 +692,148 @@ function GetFormId()
     {
         case "azota.vn":
             return "" + HanoiCollabGlobals.Window.HanoiCollabExposedVariables.FormState.exam_obj.id;
+        case "forms.office.com":
+            return "" + HanoiCollabGlobals.Window.HanoiCollabExposedVariables.FormState.$$.$H;
         default:
             return "";
     }
 }
+
+class QuestionInfo
+{
+    constructor(htmlElement, id, type, index)
+    {
+        this.HtmlElement = htmlElement;
+        this.Id = id;
+        this.Type = type;
+        this.Index = index;
+
+        var parser = new DOMParser();
+        this.CommunityAnswersHtml = parser.parseFromString(
+            `
+            <div class="hanoicollab-community-answers">
+                <div class="hanoicollab-community-answers-header">Community answers:</div>
+                <div class="hanoicollab-community-answers-multiple-choice">
+                    <div class="hanoicollab-community-answers-multiple-choice-header">Multiple choice:</div>
+                    <div class="hanoicollab-community-answers-multiple-choice-contents"></div>
+                </div>
+                <div class="hanoicollab-community-answers-written">
+                    <div class="hanoicollab-community-answers-written-header">Written:</div>
+                    <select class="hanoicollab-community-answers-written-select">
+                    </select>
+                    <div class="hanoicollab-community-answers-written-content" style="user-select:text;"></div>
+                </div>
+            </div>
+            `
+        , "text/html").body.firstChild;
+
+        if (this.Type == "multipleChoice")
+        {
+            this.CommunityAnswersHtml.querySelector(".hanoicollab-community-answers-written").style.display = "none";
+        }
+
+        if (this.Type == "written")
+        {
+            this.CommunityAnswersHtml.querySelector(".hanoicollab-community-answers-multiple-choice").style.display = "none";
+        }
+
+        var info = this;
+        this.CommunityAnswersHtml.querySelector("select").addEventListener("change", function()
+        {
+            info.UpdateWrittenSelect(this);
+        });
+
+        if (this.IsMultipleChoice())
+        {
+            this.Answers = [];
+        }
+    }
+
+    IsMultipleChoice()
+    {
+        return this.Type == "multipleChoice" || this.Type == "hybrid";
+    }
+
+    IsWritten()
+    {
+        return this.Type == "written" || this.Type == "hybrid";
+    }
+
+    GetUserAnswer()
+    {
+        throw "Not implemented";
+    }
+    
+    SetUserAnswer()
+    {
+        throw "Not implemented";
+    }
+
+    async SendUserAnswer(answer)
+    {
+        if (HanoiCollabGlobals.ExamConnection)
+        {
+            var info = this;
+            await HanoiCollabGlobals.ExamConnection.invoke("UpdateAnswer", GetFormId(), info.Id, answer);    
+        }
+    }
+
+    ClearUserAnswer()
+    {
+        throw "Not implemented";
+    }
+
+    UpdateWrittenSelect(select)
+    {
+        var value = select.value;
+        if (!value)
+        {
+            return;
+        }
+        var contentElement = select.parentElement.querySelector(".hanoicollab-community-answers-written-content");
+        contentElement.innerText = this.CommunityAnswers.find(function(ans){return ans.User == value}).Answer;
+    }
+
+    UpdateCommunityAnswersHtml()
+    {
+        var info = this;
+        if (info.IsMultipleChoice())
+        {
+            var communityAnswers = info.CommunityAnswers;
+            var communityAnswersHtml = info.CommunityAnswersHtml;
+            var multipleChoiceHtml = communityAnswersHtml.querySelector(".hanoicollab-community-answers-multiple-choice-contents");
+            var elem = HanoiCollabGlobals.Document.createElement("div");
+            for (var key of Object.keys(communityAnswers).sort(function(key1, key2){return communityAnswers[key1].Alpha.localeCompare(communityAnswers[key2].Alpha)}))
+            {
+                if (communityAnswers[key].Alpha)
+                {
+                    var p = HanoiCollabGlobals.Document.createElement("p");
+                    p.innerHTML = `<b>${communityAnswers[key].Alpha}</b> (${communityAnswers[key].length}): ${EscapeHtml(communityAnswers[key].slice(0, Math.min(communityAnswers[key].length, 10)).join(", "))}`;
+                    elem.appendChild(p);
+                }
+            }
+            multipleChoiceHtml.innerHTML = elem.innerHTML;
+        }
+
+        if (info.IsWritten())
+        {
+            var communityAnswers = info.CommunityAnswers;
+            var communityAnswersHtml = info.CommunityAnswersHtml;
+            var writtenSelect = communityAnswersHtml.querySelector(".hanoicollab-community-answers-written-select");
+            var newSelect = HanoiCollabGlobals.Document.createElement("select");
+            for (var ans of communityAnswers.sort(
+                function(a, b){return (a.Answer.length != b.Answer.length) ? a.Answer.length - b.Answer.length : a.User.localeCompare(b.User)}))
+            {
+                var option = HanoiCollabGlobals.Document.createElement("option");
+                option.value = ans.User;
+                option.innerText = `${ans.User} (${ans.Answer.length}) characters`;
+                newSelect.appendChild(option);
+            }
+            writtenSelect.innerHTML = newSelect.innerHTML;
+            info.UpdateWrittenSelect(writtenSelect);
+        }
+    }
+};
 
 // A unified interface for getting questions.
 function GetQuestions()
@@ -665,26 +846,10 @@ function GetQuestions()
 
             var elements = HanoiCollab$(".question-content");
             var questions = HanoiCollabGlobals.Window.HanoiCollabExposedVariables.FormState.questionList;
-            var parser = new DOMParser();
 
             for (var i = 0; i < questions.length; ++i)
             {
-                var info = 
-                {
-                    HtmlElement: elements[i],
-                    Id: "" + questions[i].id,
-                    Type: questions[i].answerType === 1 ? "multipleChoice" : "written", // The last type is hybrid, for SHUB questions.
-                    Index: i,
-                    // No hybrid types.
-                    IsMultipleChoice: function() 
-                    {
-                        return this.Type == "multipleChoice";
-                    },
-                    IsWritten: function()
-                    {
-                        return this.Type == "written"; 
-                    }
-                };
+                var info = new QuestionInfo(elements[i], "" + questions[i].id, questions[i].answerType === 1 ? "multipleChoice" : "written", i);
 
                 info.GetUserAnswer = function()
                 {
@@ -721,7 +886,6 @@ function GetQuestions()
 
                 if (questions[i].answerType === 1)
                 {
-                    info.Answers = [];
                     for (var j = 0; j < questions[i].answerConfig.length; ++j)
                     {
                         info.Answers.push({Id: questions[i].answerConfig[j].key, Alpha: questions[i].answerConfig[j].alpha});
@@ -765,101 +929,98 @@ function GetQuestions()
                     }
                 }
 
-                info.CommunityAnswersHtml = parser.parseFromString(
-                    `
-                    <div class="hanoicollab-community-answers">
-                        <div class="hanoicollab-community-answers-header">Community answers:</div>
-                        <div class="hanoicollab-community-answers-multiple-choice">
-                            <div class="hanoicollab-community-answers-multiple-choice-header">Multiple choice:</div>
-                            <div class="hanoicollab-community-answers-multiple-choice-contents"></div>
-                        </div>
-                        <div class="hanoicollab-community-answers-written">
-                            <div class="hanoicollab-community-answers-written-header">Written:</div>
-                            <select class="hanoicollab-community-answers-written-select">
-                            </select>
-                            <div class="hanoicollab-community-answers-written-content" style="user-select:text;"></div>
-                        </div>
-                    </div>
-                    `
-                , "text/html").body.firstChild;
-        
-                if (info.Type == "multipleChoice")
-                {
-                    info.CommunityAnswersHtml.querySelector(".hanoicollab-community-answers-written").style.display = "none";
-                }
-        
-                if (info.Type == "written")
-                {
-                    info.CommunityAnswersHtml.querySelector(".hanoicollab-community-answers-multiple-choice").style.display = "none";
-                }
-     
-                info.UpdateWrittenSelect = function(select)
-                {
-                    var value = select.value;
-                    var contentElement = select.parentElement.querySelector(".hanoicollab-community-answers-written-content");
-                    contentElement.innerText = info.CommunityAnswers.find(function(ans){return ans.User == value}).Answer;
-                }
-
-                info.CommunityAnswersHtml.querySelector("select").addEventListener("change", function()
-                {
-                    info.UpdateWrittenSelect(this);
-                });
-
-                info.SendUserAnswer = async function(answer)
-                {
-                    if (HanoiCollabGlobals.ExamConnection)
-                    {
-                        var info = this;
-                        await HanoiCollabGlobals.ExamConnection.invoke("UpdateAnswer", GetFormId(), info.Id, answer);    
-                    }
-                }
-
-                info.UpdateCommunityAnswersHtml = function()
-                {
-                    var info = this;
-                    if (info.IsMultipleChoice())
-                    {
-                        var communityAnswers = info.CommunityAnswers;
-                        var communityAnswersHtml = info.CommunityAnswersHtml;
-                        var multipleChoiceHtml = communityAnswersHtml.querySelector(".hanoicollab-community-answers-multiple-choice-contents");
-                        var elem = HanoiCollabGlobals.Document.createElement("div");
-                        for (var key of Object.keys(communityAnswers))
-                        {
-                            if (communityAnswers[key].Alpha)
-                            {
-                                var p = HanoiCollabGlobals.Document.createElement("p");
-                                p.innerHTML = `<b>${communityAnswers[key].Alpha}</b> (${communityAnswers[key].length}): ${EscapeHtml(communityAnswers[key].slice(0, Math.min(communityAnswers[key].length, 10)).join(", "))}`;
-                                elem.appendChild(p);
-                            }
-                        }
-                        multipleChoiceHtml.innerHTML = elem.innerHTML;
-                    }
-
-                    if (info.IsWritten())
-                    {
-                        var communityAnswers = info.CommunityAnswers;
-                        var communityAnswersHtml = info.CommunityAnswersHtml;
-                        var writtenSelect = communityAnswersHtml.querySelector(".hanoicollab-community-answers-written-select");
-                        var newSelect = HanoiCollabGlobals.Document.createElement("select");
-                        for (var ans of communityAnswers.sort(
-                            function(a, b){return (a.Answer.length != b.Answer.length) ? a.Answer.length - b.Answer.length : a.User.localeCompare(b.User)}))
-                        {
-                            var option = HanoiCollabGlobals.Document.createElement("option");
-                            option.value = ans.User;
-                            option.innerText = `${ans.User} (${ans.Answer.length}) characters`;
-                            newSelect.appendChild(option);
-                        }
-                        writtenSelect.innerHTML = newSelect.innerHTML;
-                        info.UpdateWrittenSelect(writtenSelect);
-                    }
-                }
-
                 result.push(info);
             }
 
             return result;
         }
-        break;
+        case "forms.office.com":
+        {
+            var result = [];
+            var elements = HanoiCollab$(".office-form-question-content");
+            var questions = HanoiCollabGlobals.Window.HanoiCollabExposedVariables.FormState.$$.$e;
+
+            for (let i = 0; i < elements.length; ++i)
+            {
+                var currentQuestionId = HanoiCollab$(elements[i]).find(".question-title-box")[0].id.substr("QuestionId_".length);
+                var currentQuestion = questions[currentQuestionId];
+                var info = new QuestionInfo(elements[i], currentQuestionId, currentQuestion.info.type == "Question.Choice" ? "multipleChoice" : "written", i);
+
+                info.GetUserAnswer = function()
+                {
+                    var info = this;
+                    var content = HanoiCollabGlobals.Window.HanoiCollabExposedVariables.FormState.$$.$e[info.Id].runtime.$c;
+                    if (!content || content.length == 0)
+                    {
+                        return null;
+                    }
+                    if (info.IsMultipleChoice())
+                    {
+                        // Array of choices.
+                        return content[0].getHashCode();
+                    }
+                    else
+                    {
+                        // String
+                        return content;
+                    }
+                }
+
+                info.SetUserAnswer = function(answer)
+                {
+                    if (this.SendUserAnswer)
+                    {
+                        this.SendUserAnswer(answer);
+                    }
+                }
+
+                if (info.IsMultipleChoice())
+                {
+                    var alpha = "A";
+                    for (let j = 0; j < currentQuestion.info.choices.length; ++j)
+                    {
+                        info.Answers.push({Id: currentQuestion.info.choices[j].description.getHashCode(), Alpha: String.fromCharCode(alpha.charCodeAt(0) + j)});
+                    }
+
+                    info.ClearUserAnswer = function()
+                    {
+                        var info = this;
+                        HanoiCollabGlobals.Window.HanoiCollabExposedVariables.FormState.$$.$e[info.Id].runtime.$c = [];
+                        for (var input of info.HtmlElement.getElementsByTagName("input"))
+                        {
+                            input.checked = false;
+                        }
+                        if (HanoiCollabGlobals.Window.HanoiCollabExposedVariables.UpdateLocalStorage)
+                        {
+                            HanoiCollabGlobals.Window.HanoiCollabExposedVariables.UpdateLocalStorage(
+                                HanoiCollabGlobals.Window.HanoiCollabExposedVariables.FormState.$$
+                            );    
+                        }
+                    }
+                }
+                else
+                {
+                    info.ClearUserAnswer = function()
+                    {
+                        var info = this;
+                        HanoiCollabGlobals.Window.HanoiCollabExposedVariables.FormState.$$.$e[info.Id].runtime.$c = "";
+                        for (var input of info.HtmlElement.getElementsByTagName("input"))
+                        {
+                            input.value = "";
+                        }
+                        if (HanoiCollabGlobals.Window.HanoiCollabExposedVariables.UpdateLocalStorage)
+                        {
+                            HanoiCollabGlobals.Window.HanoiCollabExposedVariables.UpdateLocalStorage(
+                                HanoiCollabGlobals.Window.HanoiCollabExposedVariables.FormState.$$
+                            );    
+                        }
+                    }
+                }
+
+                result.push(info);
+            }
+            return result;
+        }
         default:
         {
             return [];
@@ -869,19 +1030,19 @@ function GetQuestions()
 
 function SetupEventHooks(q)
 {
+    function Update()
+    {
+        // Set timeout, to wait for other event handlers:
+        setTimeout(function()
+        {
+            var answer = q.GetUserAnswer();
+            q.SetUserAnswer(answer);    
+        }, 100);
+    }
     switch (HanoiCollabGlobals.Provider)
     {
         case "azota.vn":
         {
-            function Update()
-            {
-                // Set timeout, to wait for other event handlers:
-                setTimeout(function()
-                {
-                    var answer = q.GetUserAnswer();
-                    q.SetUserAnswer(answer);    
-                }, 100);
-            }
             if (q.Type == "multipleChoice")
             {
                 q.HtmlElement.querySelector(".list-answer").addEventListener("click", Update);
@@ -890,12 +1051,26 @@ function SetupEventHooks(q)
             {
                 q.HtmlElement.querySelector("textarea").addEventListener("blur", Update);
             }
-            q.HtmlElement.querySelector(".hanoicollab-clear-button").addEventListener("click", Update);
         }
         break;
+        case "forms.office.com":
+        {
+            if (q.Type == "multipleChoice")
+            {
+                for (var row of q.HtmlElement.getElementsByClassName("office-form-question-choice-row"))
+                {
+                    row.addEventListener("click", Update);
+                }
+            }
+            else
+            {
+                q.HtmlElement.querySelector(".office-form-textfield-input").addEventListener("blur", Update);
+            }
+        }
         default:
         break;
     }
+    q.HtmlElement.querySelector(".hanoicollab-clear-button").addEventListener("click", Update);
 }
 
 function SetupElementHooks()
@@ -1066,6 +1241,7 @@ function SetupCommunityAnswersUserInterface()
     switch(HanoiCollabGlobals.Provider)
     {
         case "azota.vn":
+        case "forms.office.com":
         default:
         {
             for (var q of HanoiCollabGlobals.Questions)
