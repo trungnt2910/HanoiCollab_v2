@@ -9,14 +9,14 @@ namespace HanoiCollab.Hubs
         [Authorize]
         public async Task SendMessage(string channel, string message)
         {
-            await Clients.Group(channel).SendAsync("ReceiveMessage", Context.User.FindFirst(ClaimTypes.Name).Value, message);
+            await Clients.Group(channel).SendAsync("ReceiveMessage", GetUserName(), message);
         }
 
         [Authorize]
         public async Task JoinChannel(string channel)
         {
             await Groups.AddToGroupAsync(Context.ConnectionId, channel);
-            var name = Context.User.FindFirst(ClaimTypes.Name).Value;
+            var name = GetUserName();
             await Clients.Group(channel).SendAsync("ReceiveMessage", name, $"{name} has joined the group.");
         }
 
@@ -24,8 +24,13 @@ namespace HanoiCollab.Hubs
         public async Task LeaveChannel(string channel)
         {
             await Groups.RemoveFromGroupAsync(Context.ConnectionId, channel);
-            var name = Context.User.FindFirst(ClaimTypes.Name).Value;
+            var name = GetUserName();
             await Clients.Group(channel).SendAsync("ReceiveMessage", name, $"{name} has left the group.");
+        }
+
+        private string GetUserName()
+        {
+            return Context.User.FindFirst(ClaimTypes.Name)?.Value ?? "Anonymous";
         }
     }
 }

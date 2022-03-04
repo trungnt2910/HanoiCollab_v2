@@ -16,6 +16,7 @@ builder.Services.Configure<JwtSettings>(
     builder.Configuration.GetSection("JwtSettings"));
 
 builder.Services.AddSingleton<AccountsService>();
+builder.Services.AddSingleton<QuestionsService>();
 
 builder.Services.AddControllers()
     .AddJsonOptions(
@@ -97,5 +98,6 @@ app.UseAuthentication();
 app.MapControllers();
 
 app.MapHub<ChatHub>("/hubs/chat");
+app.MapHub<ExamHub>("/hubs/exam");
 
 app.Run();

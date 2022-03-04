@@ -7,5 +7,7 @@
         public string DatabaseName { get; set; }
 
         public string UsersCollectionName { get; set; }
+
+        public string QuestionsCollectionName { get; set; }
     }
 }
