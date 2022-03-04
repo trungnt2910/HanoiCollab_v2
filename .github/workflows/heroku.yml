@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - master
+    paths:
+      - '.github/workflows/**'
+      - 'HanoiCollab_v2/**'
 
 jobs:
   build:
@@ -29,5 +32,10 @@ jobs:
           heroku_api_key: ${{secrets.HEROKU_API_KEY}}
           heroku_app_name: "hanoicollab" #Must be unique in Heroku
           heroku_email: ${{secrets.HEROKU_EMAIL}}
-          buildpack: "https://github.com/jincod/dotnetcore-buildpack.git"
-          branch: master
+          justlogin: true
+
+      - name: Push to heroku
+        run: |
+          heroku git:remote -a hanoicollab
+          heroku buildpacks:set jincod/dotnetcore
+          git push -f heroku master
