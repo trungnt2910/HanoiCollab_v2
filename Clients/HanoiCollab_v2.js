@@ -401,6 +401,7 @@ HanoiCollabScriptPatches = {
             // - It does NOT block monitor action in the main script.
             // - It takes a long time to apply this patch.
             // code = code.replace(`key:"add",value:function(e,t){this.userTestId`, `key:"add",value:function(e,t){console.log("Blocked monitor action");console.log(e);return;this.userTestId`)
+            code = code.replace(`component:"a",href:n`, `component:"a",href:(function(n){if(!window.HanoiCollabExposedVariables)window.HanoiCollabExposedVariables=[];if(!window.HanoiCollabExposedVariables.ExposedFiles)window.HanoiCollabExposedVariables.ExposedFiles=[];window.HanoiCollabExposedVariables.ExposedFiles.push(n);return n;})(n)`)
         }
         return code;
     },
@@ -913,9 +914,20 @@ function GetQuestions()
 
                 if (questions[i].answerType === 1)
                 {
-                    for (var j = 0; j < questions[i].answerConfig.length; ++j)
+                    if (questions[i].answerConfig[0].alpha)
                     {
-                        info.Answers.push({Id: questions[i].answerConfig[j].key, Alpha: questions[i].answerConfig[j].alpha});
+                        for (var j = 0; j < questions[i].answerConfig.length; ++j)
+                        {
+                            info.Answers.push({Id: questions[i].answerConfig[j].key, Alpha: questions[i].answerConfig[j].alpha});
+                        }
+                    }
+                    else
+                    {
+                        for (var j = 0; j < questions[i].answerConfig[0].answer.length; ++j)
+                        {
+                            //To-Do: Is this shit shuffled?
+                            info.Answers.push({Id: questions[i].answerConfig[0].answer[j].content, Alpha: questions[i].answerConfig[0].answer[j].content});
+                        }
                     }
 
                     info.ClearUserAnswer = function()
@@ -1105,26 +1117,27 @@ function GetQuestions()
 function SetupElementHooks()
 {
     var questions = HanoiCollabGlobals.Questions;
+    function Update(q)
+    {
+        // Set timeout, to wait for other event handlers:
+        setTimeout(function()
+        {
+            var answer = q.GetUserAnswer();
+            q.SetUserAnswer(answer);    
+        }, 100);
+    }
+
+    function AddButton(q)
+    {
+        var button = HanoiCollabGlobals.Document.createElement("button");
+        button.innerText = "Clear";
+        button.className = "hanoicollab-clear-button";
+        button.addEventListener("click", function() {q.ClearUserAnswer();});
+        q.HtmlElement.appendChild(button);    
+    }
+
     for (/* new var in each interation */let q of questions)
     {
-        function AddButton(q)
-        {
-            var button = HanoiCollabGlobals.Document.createElement("button");
-            button.innerText = "Clear";
-            button.className = "hanoicollab-clear-button";
-            button.addEventListener("click", function() {q.ClearUserAnswer();});
-            q.HtmlElement.appendChild(button);    
-        }
-        
-        function Update()
-        {
-            // Set timeout, to wait for other event handlers:
-            setTimeout(function()
-            {
-                var answer = q.GetUserAnswer();
-                q.SetUserAnswer(answer);    
-            }, 100);
-        }
         
         switch (HanoiCollabGlobals.Provider)
         {
@@ -1132,11 +1145,11 @@ function SetupElementHooks()
             {
                 if (q.Type == "multipleChoice")
                 {
-                    q.HtmlElement.querySelector(".list-answer").addEventListener("click", Update);
+                    q.HtmlElement.querySelector(".list-answer").addEventListener("click", function(){Update(q)});
                 }
                 else
                 {
-                    q.HtmlElement.querySelector("textarea").addEventListener("blur", Update);
+                    q.HtmlElement.querySelector("textarea").addEventListener("blur", function(){Update(q)});
                 }
                 AddButton(q);
             }
@@ -1147,12 +1160,12 @@ function SetupElementHooks()
                 {
                     for (var row of q.HtmlElement.getElementsByClassName("office-form-question-choice-row"))
                     {
-                        row.addEventListener("click", Update);
+                        row.addEventListener("click", function(){Update(q)});
                     }
                 }
                 else
                 {
-                    q.HtmlElement.querySelector(".office-form-textfield-input").addEventListener("blur", Update);
+                    q.HtmlElement.querySelector(".office-form-textfield-input").addEventListener("blur", function(){Update(q)});
                 }
                 AddButton(q);
             }
@@ -1173,44 +1186,43 @@ function SetupElementHooks()
             default:
             break;
         }
-        q.HtmlElement.querySelector(".hanoicollab-clear-button")?.addEventListener("click", Update);
+        q.HtmlElement.querySelector(".hanoicollab-clear-button")?.addEventListener("click", function(){Update(q)});
     }
 
     if (HanoiCollabGlobals.Provider == "shub.edu.vn")
     {
-        new MutationObserver(function()
+        new MutationObserver(function(mutations)
         {
-            for (var q of HanoiCollabGlobals.Questions)
+            for (var mutation of mutations)
             {
-                if (q.HtmlElement.style.border.startsWith("2px"))
-                {
-                    Update();
-                }
+                Update(HanoiCollabGlobals.Questions[Number.parseInt(mutation.oldValue.substring("Đáp án câu ".length)) - 1]);
             }
-        }).observe(HanoiCollabGlobals.Document.getElementById("inputAnsKey"), {subtree: false, childList: false, attributes: true, attributeFilter: ["placeholder"]})
+        }).observe(HanoiCollabGlobals.Document.getElementById("inputAnsKey"), {subtree: false, childList: false, attributes: true, attributeOldValue : true, attributeFilter: ["placeholder"]})
     }
 }
 
 class QuestionLayout
 {
-    constructor(type, description, id, answers, resources)
+    constructor(type, description, id, answers, resources, imageResources)
     {
         this.Type = type;
         this.Description = description;
         this.Id = id;
         this.Answers = answers;
         this.Resources = resources;
+        this.ImageResources = imageResources; 
     }
 }
 
 class AnswerLayout
 {
-    constructor(description, resources, id, alpha)
+    constructor(description, resources, id, alpha, imageResources)
     {
         this.Description = description;
         this.Resources = resources;
         this.Id = id;
         this.Alpha = alpha;
+        this.ImageResources = imageResources;
     }
 }
 
@@ -1227,6 +1239,13 @@ class ExamLayout
     {
         switch (HanoiCollabGlobals.Provider)
         {
+            case "shub.edu.vn":
+            {
+                return HanoiCollabGlobals.Window.HanoiCollabExposedVariables?.ExposedFiles?.filter(function (a, b, c) 
+                {
+                    return c.indexOf(a) === b;
+                });   
+            }
             default:
             {
                 return [];
@@ -1256,7 +1275,7 @@ class ExamLayout
                         for (var j = 0; j < currentQuestion.info.choices.length; ++j)
                         {
                             var currentAnswer = currentQuestion.info.choices[j];
-                            answers.push(new AnswerLayout(currentAnswer.description, null, currentAnswer.description.getHashCode(), String.fromCharCode(alpha.charCodeAt(0) + j)));
+                            answers.push(new AnswerLayout(currentAnswer.description, null, currentAnswer.description.getHashCode(), String.fromCharCode(alpha.charCodeAt(0) + j), null));
                         }
                         currentQuestionType = "multipleChoice";
                     }
@@ -1264,23 +1283,91 @@ class ExamLayout
                     {
                         currentQuestionType = "written";
                     }
-                    var currentQuestionResources = null;
+                    var currentQuestionImageResources = null;
                     if (currentQuestion.info.image)
                     {
-                        currentQuestionResources = [currentQuestion.info.image];
+                        currentQuestionImageResources = [currentQuestion.info.image];
                     }
                     var currentQuestionDescription = currentQuestion.info.title;
                     if (currentQuestion.info.subtitle)
                     {
                         currentQuestionDescription += "\n" + currentQuestion.info.subtitle;
                     }
-                    result.push(new QuestionLayout(currentQuestionType, currentQuestionDescription, currentQuestionId, answers, currentQuestionResources));            
+                    result.push(new QuestionLayout(currentQuestionType, currentQuestionDescription, currentQuestionId, answers, null, currentQuestionImageResources));            
                 }
                 return result;
             }
             case "azota.vn":
+            {
+                var result = [];
+                var questions = HanoiCollabGlobals.Window.HanoiCollabExposedVariables.FormState.questionList;
+
+                for (let i = 0; i < questions.length; ++i)
+                {
+                    var currentQuestion = questions[i];
+                    var currentQuestionId = "" + currentQuestion.id;
+                    var answers = [];
+                    var currentQuestionType = currentQuestion.answerType == 1 ? "multipleChoice" : "written";
+                    if (currentQuestion.answerType == 1)
+                    {
+                        if (currentQuestion.answerConfig[0].alpha)
+                        {
+                            for (var j = 0; j < currentQuestion.answerConfig.length; ++j)
+                            {
+                                answers.push(new AnswerLayout(currentQuestion.answerConfig[j].content.replace("<br>", "\n"), null, currentQuestion.answerConfig[j].key, currentQuestion.answerConfig[j].alpha, null));
+                            }
+                        }
+                        else
+                        {
+                            for (var j = 0; j < currentQuestion.answerConfig[0].answer.length; ++j)
+                            {
+                                //To-Do: Is this shit shuffled?
+                                answers.push(new AnswerLayout(null, null, currentQuestion.answerConfig[0].answer[j].content, currentQuestion.answerConfig[0].answer[j].content, null));
+                            }
+                        }
+                    }
+                    var currentQuestionResources = [];
+                    var currentQuestionImageResources = [];
+                    var currentQuestionDescription = currentQuestion.questionText;
+                    for (var content of currentQuestion.questionContent)
+                    {
+                        if (["jpg", "png", "bmp", "svg"].includes(content.extension))
+                        {
+                            currentQuestionImageResources.push(content.url);
+                        }
+                        else if (content.extension == "text")
+                        {
+                            currentQuestionDescription += content.content.replace("<br>", "\n");
+                        }
+                        else
+                        {
+                            currentQuestionResources.push(content.url);                            
+                        }
+                    }
+                    result.push(new QuestionLayout(currentQuestionType, currentQuestionDescription, currentQuestionId, answers, currentQuestionResources, currentQuestionImageResources));            
+                }
+
+                return result;
+            }
             break;
             case "shub.edu.vn":
+            {
+                // To-do: SHUB questions may have multimedia resources.
+                var result = [];
+                
+                // To-do: SHUB questions might also have descriptions.
+                for (var q of HanoiCollabGlobals.Questions)
+                {
+                    var answers = [];
+                    for (var a of q.Answers)
+                    {
+                        answers.push(new AnswerLayout("", null, a.Id, a.Alpha, null));
+                    }
+                    result.push(new QuestionLayout("hybrid", "SHUB question #" + (q.Index + 1), q.Id, answers, null, null));
+                }
+
+                return result;
+            }
             break;
         }
     }
