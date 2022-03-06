@@ -131,9 +131,9 @@
             if (response.IsSuccessStatusCode)
             {
                 var identity = await response.Content.ReadFromJsonAsync<Identity>();
-                if (!(_loginTcs?.Task.IsCompleted ?? true))
+                if (!(_loginTcs?.Task.IsCompleted ?? false))
                 {
-                    await _identityService.SetUsernameAsync(_activeUsername);
+                    await _identityService.SetIdentityAsync(identity);
                 }
                 _loginTcs?.SetResult(identity);
                 _loginTcs = null;
@@ -170,7 +170,7 @@
                 }
                 else if (serverResponse.Status == "Error")
                 {
-                    _statusType = "danger";                    
+                    _statusType = "danger";
                 }
                 else
                 {
