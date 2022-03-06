@@ -7,7 +7,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "HanoiCollab_v2", "HanoiColl
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "HanoiCollabBlazor", "HanoiCollabBlazor\HanoiCollabBlazor.csproj", "{BF6A9267-E37A-4FB3-B4E9-1A7EAF9251A6}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "HanoiCollabShared", "HanoiCollabSharedModels\HanoiCollabShared.csproj", "{AEF51A05-6AC0-4F54-AA31-4AA4FE9D67E2}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "HanoiCollabShared", "HanoiCollabShared\HanoiCollabShared.csproj", "{AEF51A05-6AC0-4F54-AA31-4AA4FE9D67E2}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
