@@ -7,6 +7,8 @@ on:
     paths:
       - '.github/workflows/**'
       - 'HanoiCollab_v2/**'
+      - 'HanoiCollabBlazor/**'
+      - 'HanoiCollabShared/**'
 
 jobs:
   build:
