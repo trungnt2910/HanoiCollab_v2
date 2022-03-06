@@ -1,0 +1,124 @@
+﻿@using HanoiCollab.Models;
+
+<p>Community answers:</p> 
+@if (_communityAnswer?.MultipleChoiceAnswers.Any() ?? false)
+{
+    <div>
+        <p>Multiple choice:</p>
+        @foreach (var kvp in _communityAnswer.MultipleChoiceAnswers)
+        {
+            <p>
+                <b>@kvp.Key</b> (<span>@kvp.Value.Count</span>): @string.Join(", ", kvp.Value.Take(10))
+            </p>
+        }
+    </div>
+}
+@if (_communityAnswer?.WrittenAnswers.Any() ?? false)
+{
+    <div>
+        <p>Written:</p>
+        <RadzenDropDown 
+            AllowClear="@false" 
+            TValue="@string" 
+            class="w-100 m-2" 
+            Placeholder="Choose an answer from our community..." 
+            Data="@_communityAnswer.WrittenAnswers.Select(kvp => new { Text = $"{kvp.Key} ({kvp.Value.Length} characters)", Value = kvp.Key })"
+            ValueProperty="Value"
+            TextProperty="Text"
+            Change="(value) => SelectedUser = (string)value" />
+        <Span Text="@SelectedAnswer"></Span>
+    </div>
+}
+
+@code {
+    private CommunityAnswer _communityAnswer;
+
+    [Parameter]
+    [EditorRequired]
+    public CommunityAnswer CommunityAnswer
+    {
+        get => _communityAnswer;
+        set
+        {
+            if (_communityAnswer != null)
+            {
+                _communityAnswer.Updated -= OnCommunityAnswerUpdated;
+            }
+            _communityAnswer = value;
+            if (_communityAnswer != null)
+            {
+                _communityAnswer.Updated += OnCommunityAnswerUpdated;                
+            }
+        }
+    }
+
+    private void OnCommunityAnswerUpdated(object sender, EventArgs args)
+    {
+        UpdateSelectedAnswer();
+        StateHasChanged();
+    }
+
+    private class WrittenAnswerInfo
+    {
+        public string User { get; set; }
+        public string Answer { get; set; }
+
+        public override string ToString()
+        {
+            return $"{User} ({Answer.Length} characters)";
+        }
+
+        public static bool operator==(WrittenAnswerInfo left, WrittenAnswerInfo right)
+        {
+            if (left == null || right == null)
+            {
+                return object.ReferenceEquals(left, right);
+            }
+            return left.User == right.User;
+        }
+
+        public static bool operator!=(WrittenAnswerInfo left, WrittenAnswerInfo right)
+        {
+            if (left == null || right == null)
+            {
+                return object.ReferenceEquals(left, right);
+            }
+            return left.User == right.User;
+        }
+
+        public override bool Equals(object obj)
+        {
+            if (obj is WrittenAnswerInfo info)
+            {
+                return this == info;
+            }
+            return false;
+        }
+
+        public override int GetHashCode()
+        {
+            return User.GetHashCode();
+        }
+    }
+
+    List<WrittenAnswerInfo> WrittenAnswerInfos => 
+        _communityAnswer.WrittenAnswers.Select(kvp => new WrittenAnswerInfo() { User = kvp.Key, Answer = kvp.Value }).ToList();
+
+    string _selectedUser;
+    string SelectedUser
+    {
+        get => _selectedUser;
+        set
+        {
+            _selectedUser = value;
+            UpdateSelectedAnswer();
+            StateHasChanged();
+        }
+    }
+
+    string SelectedAnswer { get; set; }
+    private void UpdateSelectedAnswer()
+    {
+        SelectedAnswer = (SelectedUser == null) ? null : _communityAnswer?.WrittenAnswers.GetValueOrDefault(SelectedUser);
+    }
+}

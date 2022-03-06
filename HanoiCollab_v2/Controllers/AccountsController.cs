@@ -45,10 +45,10 @@ namespace HanoiCollab.Controllers
                     signingCredentials: new SigningCredentials(_authSigningKey, SecurityAlgorithms.HmacSha256)
                     );
 
-                return Ok(new
+                return Ok(new Identity
                 {
-                    token = new JwtSecurityTokenHandler().WriteToken(token),
-                    expiration = token.ValidTo
+                    Token = new JwtSecurityTokenHandler().WriteToken(token),
+                    Expiration = token.ValidTo
                 });
             }
             return Unauthorized();

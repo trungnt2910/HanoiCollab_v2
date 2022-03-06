@@ -16,6 +16,7 @@ builder.Services.Configure<JwtSettings>(
     builder.Configuration.GetSection("JwtSettings"));
 
 builder.Services.AddSingleton<AccountsService>();
+builder.Services.AddSingleton<ExamService>();
 builder.Services.AddSingleton<QuestionsService>();
 
 builder.Services.AddControllers()
@@ -85,15 +86,27 @@ if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
+    app.UseWebAssemblyDebugging();
 }
 
 app.UseCors("CorsPolicy");
 
-//app.UseHttpsRedirection();
+app.UseHttpsRedirection();
+
+app.UseRouting();
 
 app.UseAuthorization();
 
 app.UseAuthentication();
+
+app.UseBlazorFrameworkFiles();
+
+app.UseStaticFiles();
+
+app.UseEndpoints(endpoints =>
+{
+    endpoints.MapFallbackToFile("index.html");
+});
 
 app.MapControllers();
 

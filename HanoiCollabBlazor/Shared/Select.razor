@@ -1,0 +1,101 @@
+﻿@typeparam ValueT
+
+<select class="form-select m-2" @bind="_selected">
+    @if (_items != null)
+    for (int i = 0; i < _items.Count; ++i)
+    {
+        var index = i;
+        var item = _items[i];
+        <option value="@index.ToString()">@item.ToString()</option>
+    }
+</select>
+
+@code {
+    private List<ValueT> _items { get; set; }
+
+    private string _selected_field;
+    private string _selected 
+    {
+        get => _selected_field;
+        set
+        {
+            if (_selected_field != value)
+            {
+                var oldSelectedItem = SelectedItem;
+                _selected_field = value;
+                var newSelectedItem = SelectedItem;
+                if (oldSelectedItem != newSelectedItem)
+                {
+                    OnSelectionChanged();
+                    _ = SelectedItemChanged.InvokeAsync(SelectedItem);                    
+                }
+            }
+        }
+    }
+
+    public int? SelectedIndex
+    {
+        get => _selected == null ? null : int.Parse(_selected);
+        set
+        {
+            _selected = value?.ToString();
+        }
+    }
+
+    [Parameter]
+    public EventCallback<object> SelectedItemChanged { get; set; }
+
+    public object SelectedItem 
+    {
+        get => SelectedIndex == null ? null : _items[SelectedIndex.Value];
+        set
+        {
+            var idx = ((System.Collections.IList)_items)?.IndexOf(value) ?? -1;
+            SelectedIndex = (idx == -1) ? null : idx;
+        }
+    }
+
+    public event EventHandler SelectionChanged;
+
+    [Parameter]
+    [EditorRequired]
+    public List<ValueT> Items
+    {
+        get => _items;
+        set
+        {
+            if (_items != value)
+            {
+                var oldItem = SelectedItem;
+                _items = value;
+                StateHasChanged();
+                if (_items == null || _items.Count == 0)
+                {
+                    _selected_field = null;
+                }
+                else
+                {
+                    var idx = ((System.Collections.IList)_items).IndexOf(oldItem);
+                    var newSelected = Math.Max(0, idx).ToString();
+                    if (_selected_field != newSelected)
+                    {
+                        _selected_field = newSelected;
+                    }
+                }
+                var newItem = SelectedItem;
+                if (oldItem != newItem)
+                {
+                    OnSelectionChanged();
+                    _ = SelectedItemChanged.InvokeAsync(SelectedItem);                    
+                }
+
+            }
+        }
+    }
+
+    private void OnSelectionChanged()
+    {
+        SelectionChanged?.Invoke(this, EventArgs.Empty);
+    }
+}
+

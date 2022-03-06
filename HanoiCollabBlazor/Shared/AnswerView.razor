@@ -1,0 +1,29 @@
+﻿@using HanoiCollab.Models
+
+<p><b>@_answerLayout.Alpha</b>: <Span Text="@_answerLayout.Description"/></p>
+@if (_answerLayout.Resources?.Any() ?? false)
+{
+    <div class="d-flex">
+        <p>Answer resources: </p>
+        @foreach (var resource in _answerLayout.Resources)
+        {
+            <a class="link-info" href="@resource.ToString()">@resource.ToString().Truncate(8) </a>
+        }
+    </div>
+}
+
+@code {
+    private AnswerLayout _answerLayout;
+
+    [Parameter]
+    [EditorRequired]
+    public AnswerLayout AnswerLayout
+    {
+        get => _answerLayout;
+        set
+        {
+            _answerLayout = value;
+            StateHasChanged();
+        }
+    }
+}

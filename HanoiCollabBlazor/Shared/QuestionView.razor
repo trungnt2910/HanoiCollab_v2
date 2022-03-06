@@ -1,0 +1,55 @@
+﻿@using HanoiCollab.Models
+
+<div class="card">
+    <div class="card-title"><Span Text="@_questionLayout.Description"/></div>
+    <div class="card-body">
+        @if (_questionLayout.Resources?.Any() ?? false)
+        {
+            <div class="card-group">
+                <p>Question resources: </p>
+                @foreach (var resource in _questionLayout.Resources)
+                {
+                    <a class="link-info" href="@resource.ToString()">@resource.ToString().Truncate(8)</a>
+                    <br/>
+                }
+            </div>            
+        }
+        @if (_questionLayout.IsMultipleChoice())
+        {
+            @for (int i = 0; i < _questionLayout.Answers.Count; ++i)
+            {
+                <AnswerView AnswerLayout="@_questionLayout.Answers[i]"/>
+            }
+        }
+        <CommunityView CommunityAnswer="@_communityAnswer"/>
+    </div>
+</div>
+
+@code {
+    private QuestionLayout _questionLayout;
+    private CommunityAnswer _communityAnswer;
+
+    [Parameter]
+    [EditorRequired]
+    public QuestionLayout QuestionLayout
+    {
+        get => _questionLayout;
+        set
+        {
+            _questionLayout = value;
+            StateHasChanged();
+        }
+    }
+
+    [Parameter]
+    [EditorRequired]
+    public CommunityAnswer CommunityAnswer
+    {
+        get => _communityAnswer;
+        set
+        {
+            _communityAnswer = value;
+            StateHasChanged();
+        }
+    }
+}

@@ -8,10 +8,12 @@ namespace HanoiCollab.Hubs
 {
     public class ExamHub : Hub
     {
+        private readonly ExamService _examService;
         private readonly QuestionsService _questionsService;
 
-        public ExamHub(QuestionsService questionsService)
+        public ExamHub(ExamService examService, QuestionsService questionsService)
         {
+            _examService = examService;
             _questionsService = questionsService;
         }
 
@@ -19,6 +21,7 @@ namespace HanoiCollab.Hubs
         public async Task JoinExam(string examId)
         {
             await Groups.AddToGroupAsync(Context.ConnectionId, examId);
+            _examService.JoinExam(GetUserName(), examId);
             var questions = await _questionsService.GetQuestionsForExam(examId);
             await Clients.Caller.SendAsync("InitializeExam", questions);
         }
@@ -26,6 +29,7 @@ namespace HanoiCollab.Hubs
         [Authorize]
         public async Task LeaveExam(string examId)
         {
+            _examService.LeaveExam(GetUserName(), examId);
             await Groups.RemoveFromGroupAsync(Context.ConnectionId, examId);
         }
 
@@ -64,6 +68,24 @@ namespace HanoiCollab.Hubs
             {
                 await Clients.Group(examId).SendAsync("ReceiveAnswer", info);
             }
+        }
+
+        [Authorize]
+        public Task<List<string>> GetActiveExams()
+        {
+            return Task.FromResult(_examService.GetActiveExams(GetUserName())?.ToList() ?? new List<string>());
+        }
+
+        [Authorize]
+        public async Task RequestExamLayout(string examId)
+        {
+            await Clients.User(GetUserName()).SendAsync("RequestExamLayout", examId);
+        }
+
+        [Authorize]
+        public async Task BroadcastExamLayout(string examId, ExamLayout layout)
+        {
+            await Clients.User(GetUserName()).SendAsync("BroadcastExamLayout", examId, layout);
         }
 
         private string GetUserName()

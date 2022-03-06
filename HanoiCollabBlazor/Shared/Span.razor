@@ -1,0 +1,28 @@
+﻿@if (_lines != null)
+{
+    <span>
+        @for (int i = 0; i < _lines.Length; i++)
+        {
+            @_lines[i];
+            <br />
+        }
+    </span>
+}
+
+@code {
+    private string[] _lines;
+
+    private string _text;
+
+    [Parameter]
+    public string Text 
+    {
+        get => _text;
+        set
+        {
+            _text = value;
+            _lines = _text?.Split("\n");
+            StateHasChanged();
+        }
+    }
+}

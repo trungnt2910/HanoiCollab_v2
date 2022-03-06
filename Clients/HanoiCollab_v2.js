@@ -93,8 +93,8 @@ async function LoginPopup(displayText)
                 <p class="hanoicollab-basic-container">${displayText}</p>
                 <p class="hanoicollab-basic-container">Your current HanoiCollab server: <a class="hanoicollab-basic-container" href="${HanoiCollabGlobals.Server}" style="color:orange;">${HanoiCollabGlobals.Server}</a>.</p>
                 <p class="hanoicollab-basic-container">Press Alt+S to change your server.</p>
-                <input class="hanoicollab-basic-container" type="text" id="hanoicollab-username" value="${oldUsername}">                           
-                <input class="hanoicollab-basic-container" type="password" id="hanoicollab-password" value="">
+                <input class="hanoicollab-basic-container" type="text" id="hanoicollab-username" style="color:black;" value="${oldUsername}">                           
+                <input class="hanoicollab-basic-container" type="password" id="hanoicollab-password" style="color:black;" value="">
 
                 <style>
                     .hanoicollab-button {
@@ -153,7 +153,7 @@ async function LoginPopup(displayText)
                     if (response.status === 200)
                     {
                         var data = JSON.parse(response.responseText);
-                        if (data.token)
+                        if (data.Token)
                         {
                             GM_setValue("HanoiCollabUsername", username);
                             GM_setValue("HanoiCollabIdentity", JSON.stringify(data));
@@ -244,12 +244,12 @@ async function SetupServer()
 
 async function SetupIdentity()
 {
-    var storedIdentity = await GM_getValue("HanoiCollabIdentity", null);
-    if (!storedIdentity)
+    var storedIdentity = JSON.parse(await GM_getValue("HanoiCollabIdentity", null));
+    if (!storedIdentity || !storedIdentity.Token || !storedIdentity.Expiration || Date.parse(storedIdentity.Expiration) <= Date.now())
     {
         return await LoginPopup();
     }
-    HanoiCollabGlobals.Identity = JSON.parse(storedIdentity);
+    HanoiCollabGlobals.Identity = storedIdentity;
     return HanoiCollabGlobals.Identity;
 }
 
@@ -275,7 +275,7 @@ async function GetToken()
     {
         await LoginPopup("Session expired. Please sign in to continue using HanoiCollab.");
     }
-    return HanoiCollabGlobals.Identity.token;
+    return HanoiCollabGlobals.Identity.Token;
 }
 
 async function SetupChatConnection()
@@ -313,9 +313,9 @@ async function SetupChatUserInterface()
     HanoiCollab$("#hanoicollab-chat-container").remove();
 
     HanoiCollab$("body").append (`
-    <div id="hanoicollab-chat-container" class="hanoicollab-basic-container" style="position:fixed;right:0;bottom:0;height:20%;width:30%;border-radius:1ex;background-color:rgba(0,127,255,0.9);z-index:9997;user-select:text">
+    <div id="hanoicollab-chat-container" class="hanoicollab-basic-container" style="position:fixed;right:16;bottom:16;height:20%;width:30%;border-radius:1ex;background-color:rgba(0,127,255,0.9);z-index:9997;user-select:text">
         <div id="hanoicollab-chat-messages" style="width:100%;height:90%;overflow:auto;"></div>
-        <input type="text" autocomplete="off" id="hanoicollab-chat-input" style="width:100%;bottom:0;position:fixed">
+        <input type="text" autocomplete="off" id="hanoicollab-chat-input" style="width:100%;bottom:-10%;position:absolute">
     </div>
     `);
 
@@ -337,7 +337,7 @@ async function SetupChatUserInterface()
     HanoiCollabGlobals.ChatConnection.on("ReceiveMessage", function(name, message)
     {
         HanoiCollab$("#hanoicollab-chat-messages").append(`<p class="hanoicollab-basic-container" style="user-select:text;"><b>${EscapeHtml(name)}</b>: ${EscapeHtml(message)}</p>`);
-        HanoiCollab$("#hanoicollab-chat-messages").animate({scrollTop: $("#hanoicollab-chat-messages").prop("scrollHeight")}, 1000);
+        HanoiCollab$("#hanoicollab-chat-messages").animate({scrollTop: HanoiCollab$("#hanoicollab-chat-messages").prop("scrollHeight")}, 1000);
     })
 
     await HanoiCollabGlobals.ChatConnection.invoke("JoinChannel", HanoiCollabGlobals.Channel);
@@ -395,6 +395,13 @@ async function Download(url)
 HanoiCollabScriptPatches = {
     "shub.edu.vn": function(src, code)
     {
+        if (src.includes("_app"))
+        {
+            // This should block monitor action INSIDE THE IFRAME, however we're not using it because:
+            // - It does NOT block monitor action in the main script.
+            // - It takes a long time to apply this patch.
+            // code = code.replace(`key:"add",value:function(e,t){this.userTestId`, `key:"add",value:function(e,t){console.log("Blocked monitor action");console.log(e);return;this.userTestId`)
+        }
         return code;
     },
     "azota.vn": function(src, code)
@@ -680,6 +687,24 @@ async function WaitForTestReady()
                 }, 1000);
             }
             break;
+            case "shub.edu.vn":
+            {
+                if (!top.window.location.href.endsWith("/test"))
+                {
+                    resolve(false);
+                    return;
+                }
+                var interval = setInterval(function()
+                {
+                    if (HanoiCollabGlobals.Document.querySelectorAll("[id^=cell]").length)
+                    {
+                        clearInterval(interval);
+                        resolve(true);
+                        return;
+                    }
+                });
+            }
+            break;
             default:
                 resolve(false);
         }
@@ -694,6 +719,8 @@ function GetFormId()
             return "" + HanoiCollabGlobals.Window.HanoiCollabExposedVariables.FormState.exam_obj.id;
         case "forms.office.com":
             return "" + HanoiCollabGlobals.Window.HanoiCollabExposedVariables.FormState.$$.$H;
+        case "shub.edu.vn":
+            return "" + top.location.href.match(/homework\/([\d]+?)\/test/)[1];
         default:
             return "";
     }
@@ -1021,6 +1048,53 @@ function GetQuestions()
             }
             return result;
         }
+        case "shub.edu.vn":
+        {
+            var result = [];
+            var elements = HanoiCollab$("[id^=cell]");
+
+            for (let i = 0; i < elements.length; ++i)
+            {
+                var currentQuestionId = elements[i].id.substr("cell-".length);
+                var info = new QuestionInfo(elements[i], currentQuestionId, "hybrid", i);
+
+                info.GetUserAnswer = function()
+                {
+                    var info = this;
+                    var text = this.HtmlElement.getElementsByTagName("p")[0].innerText;
+                    var colonIndex = text.indexOf(":");
+                    text = text.substr(colonIndex + 1);
+                    if (!text)
+                    {
+                        return null;
+                    }
+                    return text;
+                }
+
+                info.SetUserAnswer = function(answer)
+                {
+                    if (this.SendUserAnswer)
+                    {
+                        this.SendUserAnswer(answer);
+                    }
+                }
+
+                info.ClearUserAnswer = function()
+                {
+                    // May or may not be implemented using simulation.
+                    throw "Not implemented.";
+                }
+
+                var alpha = "A";
+                for (let j = 0; j < 4; ++j)
+                {
+                    info.Answers.push({Id: String.fromCharCode(alpha.charCodeAt(0) + j), Alpha: String.fromCharCode(alpha.charCodeAt(0) + j)});
+                }
+
+                result.push(info);
+            }
+            return result;
+        }
         default:
         {
             return [];
@@ -1028,63 +1102,187 @@ function GetQuestions()
     }
 }
 
-function SetupEventHooks(q)
-{
-    function Update()
-    {
-        // Set timeout, to wait for other event handlers:
-        setTimeout(function()
-        {
-            var answer = q.GetUserAnswer();
-            q.SetUserAnswer(answer);    
-        }, 100);
-    }
-    switch (HanoiCollabGlobals.Provider)
-    {
-        case "azota.vn":
-        {
-            if (q.Type == "multipleChoice")
-            {
-                q.HtmlElement.querySelector(".list-answer").addEventListener("click", Update);
-            }
-            else
-            {
-                q.HtmlElement.querySelector("textarea").addEventListener("blur", Update);
-            }
-        }
-        break;
-        case "forms.office.com":
-        {
-            if (q.Type == "multipleChoice")
-            {
-                for (var row of q.HtmlElement.getElementsByClassName("office-form-question-choice-row"))
-                {
-                    row.addEventListener("click", Update);
-                }
-            }
-            else
-            {
-                q.HtmlElement.querySelector(".office-form-textfield-input").addEventListener("blur", Update);
-            }
-        }
-        default:
-        break;
-    }
-    q.HtmlElement.querySelector(".hanoicollab-clear-button").addEventListener("click", Update);
-}
-
 function SetupElementHooks()
 {
     var questions = HanoiCollabGlobals.Questions;
     for (/* new var in each interation */let q of questions)
     {
-        var button = HanoiCollabGlobals.Document.createElement("button");
-        button.innerText = "Clear";
-        button.className = "hanoicollab-clear-button";
-        button.addEventListener("click", function() {q.ClearUserAnswer();});
-        q.HtmlElement.appendChild(button);
+        function AddButton(q)
+        {
+            var button = HanoiCollabGlobals.Document.createElement("button");
+            button.innerText = "Clear";
+            button.className = "hanoicollab-clear-button";
+            button.addEventListener("click", function() {q.ClearUserAnswer();});
+            q.HtmlElement.appendChild(button);    
+        }
+        
+        function Update()
+        {
+            // Set timeout, to wait for other event handlers:
+            setTimeout(function()
+            {
+                var answer = q.GetUserAnswer();
+                q.SetUserAnswer(answer);    
+            }, 100);
+        }
+        
+        switch (HanoiCollabGlobals.Provider)
+        {
+            case "azota.vn":
+            {
+                if (q.Type == "multipleChoice")
+                {
+                    q.HtmlElement.querySelector(".list-answer").addEventListener("click", Update);
+                }
+                else
+                {
+                    q.HtmlElement.querySelector("textarea").addEventListener("blur", Update);
+                }
+                AddButton(q);
+            }
+            break;
+            case "forms.office.com":
+            {
+                if (q.Type == "multipleChoice")
+                {
+                    for (var row of q.HtmlElement.getElementsByClassName("office-form-question-choice-row"))
+                    {
+                        row.addEventListener("click", Update);
+                    }
+                }
+                else
+                {
+                    q.HtmlElement.querySelector(".office-form-textfield-input").addEventListener("blur", Update);
+                }
+                AddButton(q);
+            }
+            break;
+            case "shub.edu.vn":
+            {
+                // We don't add clear buttons for SHUB.
+                q.HtmlElement.addEventListener("click", function()
+                {
+                    setTimeout(function()
+                    {
+                        q.HtmlElement.closest(".MuiBox-root").querySelector(".hanoicollab-community-answers").remove();
+                        q.HtmlElement.closest(".MuiBox-root").appendChild(q.CommunityAnswersHtml);
+                    }, 100);
+                });
+            }
+            break;
+            default:
+            break;
+        }
+        q.HtmlElement.querySelector(".hanoicollab-clear-button")?.addEventListener("click", Update);
+    }
 
-        SetupEventHooks(q);
+    if (HanoiCollabGlobals.Provider == "shub.edu.vn")
+    {
+        new MutationObserver(function()
+        {
+            for (var q of HanoiCollabGlobals.Questions)
+            {
+                if (q.HtmlElement.style.border.startsWith("2px"))
+                {
+                    Update();
+                }
+            }
+        }).observe(HanoiCollabGlobals.Document.getElementById("inputAnsKey"), {subtree: false, childList: false, attributes: true, attributeFilter: ["placeholder"]})
+    }
+}
+
+class QuestionLayout
+{
+    constructor(type, description, id, answers, resources)
+    {
+        this.Type = type;
+        this.Description = description;
+        this.Id = id;
+        this.Answers = answers;
+        this.Resources = resources;
+    }
+}
+
+class AnswerLayout
+{
+    constructor(description, resources, id, alpha)
+    {
+        this.Description = description;
+        this.Resources = resources;
+        this.Id = id;
+        this.Alpha = alpha;
+    }
+}
+
+class ExamLayout
+{
+    constructor()
+    {
+        this.OriginalLink = top.window.location.href;
+        this.Resources = this.ExtractResources();
+        this.Questions = this.ExtractQuestions();
+    }
+
+    ExtractResources()
+    {
+        switch (HanoiCollabGlobals.Provider)
+        {
+            default:
+            {
+                return [];
+            }
+        }
+    }
+
+    ExtractQuestions()
+    {
+        switch (HanoiCollabGlobals.Provider)
+        {
+            case "forms.office.com":
+            {
+                var result = [];
+                var elements = HanoiCollab$(".office-form-question-content");
+                var questions = HanoiCollabGlobals.Window.HanoiCollabExposedVariables.FormState.$$.$e;
+    
+                for (let i = 0; i < elements.length; ++i)
+                {
+                    var currentQuestionId = HanoiCollab$(elements[i]).find(".question-title-box")[0].id.substr("QuestionId_".length);
+                    var currentQuestion = questions[currentQuestionId];
+                    var answers = [];
+                    var currentQuestionType = null;
+                    if (currentQuestion.info.type == "Question.Choice")
+                    {
+                        var alpha = "A";
+                        for (var j = 0; j < currentQuestion.info.choices.length; ++j)
+                        {
+                            var currentAnswer = currentQuestion.info.choices[j];
+                            answers.push(new AnswerLayout(currentAnswer.description, null, currentAnswer.description.getHashCode(), String.fromCharCode(alpha.charCodeAt(0) + j)));
+                        }
+                        currentQuestionType = "multipleChoice";
+                    }
+                    else
+                    {
+                        currentQuestionType = "written";
+                    }
+                    var currentQuestionResources = null;
+                    if (currentQuestion.info.image)
+                    {
+                        currentQuestionResources = [currentQuestion.info.image];
+                    }
+                    var currentQuestionDescription = currentQuestion.info.title;
+                    if (currentQuestion.info.subtitle)
+                    {
+                        currentQuestionDescription += "\n" + currentQuestion.info.subtitle;
+                    }
+                    result.push(new QuestionLayout(currentQuestionType, currentQuestionDescription, currentQuestionId, answers, currentQuestionResources));            
+                }
+                return result;
+            }
+            case "azota.vn":
+            break;
+            case "shub.edu.vn":
+            break;
+        }
     }
 }
 
@@ -1110,18 +1308,13 @@ async function SetupExamConnection()
         {
             q.CommunityAnswers = [];
 
-            if (q.Type == "multipleChoice" || q.Type == "hybrid")
+            if (q.IsMultipleChoice())
             {
                 for (var a of q.Answers)
                 {
                     q.CommunityAnswers[a.Id] = [];
                     q.CommunityAnswers[a.Id].Alpha = a.Alpha; 
                 }
-            }
-            
-            if (q.Type == "written" || q.Type == "hybrid")
-            {
-                q.CommunityAnswers = [];
             }
         }
 
@@ -1201,6 +1394,14 @@ async function SetupExamConnection()
         question.UpdateCommunityAnswersHtml();
     });
 
+    connection.on("RequestExamLayout", function(examId)
+    {
+        if (examId === GetFormId())
+        {
+            connection.invoke("BroadcastExamLayout", examId, new ExamLayout());
+        }
+    });
+
     await connection.start();
 
     await connection.invoke("JoinExam", GetFormId());
@@ -1240,6 +1441,21 @@ function SetupCommunityAnswersUserInterface()
 {
     switch(HanoiCollabGlobals.Provider)
     {
+        case "shub.edu.vn":
+        {
+            for (var q of HanoiCollabGlobals.Questions)
+            {
+                // Active question.
+                if (q.HtmlElement.style.border.startsWith("2px"))
+                {
+                    q.HtmlElement.closest(".MuiBox-root").appendChild(q.CommunityAnswersHtml);
+                    return;
+                }
+            }
+            var q = HanoiCollabGlobals.Questions[0];
+            q.HtmlElement.closest(".MuiBox-root").appendChild(q.CommunityAnswersHtml);
+        }
+        break;
         case "azota.vn":
         case "forms.office.com":
         default:

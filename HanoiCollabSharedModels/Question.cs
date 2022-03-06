@@ -8,7 +8,7 @@ namespace HanoiCollab.Models
     {
         [BsonId]
         [BsonRepresentation(BsonType.ObjectId)]
-        public string Id { get; set; }
+        public string MongoId { get; set; }
 
         [JsonPropertyName("QuestionId")]
         public string QuestionId { get; set; }
