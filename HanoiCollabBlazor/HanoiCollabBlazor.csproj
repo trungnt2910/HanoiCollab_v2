@@ -20,7 +20,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\HanoiCollabSharedModels\HanoiCollabShared.csproj" />
+    <ProjectReference Include="..\HanoiCollabShared\HanoiCollabShared.csproj" />
   </ItemGroup>
 
 </Project>
