@@ -21,6 +21,9 @@ namespace HanoiCollab.Models
         [JsonPropertyName("Resources")]
         public List<Uri> Resources { get; set; }
 
+        [JsonPropertyName("ImageResources")]
+        public List<Uri> ImageResources { get; set; }
+
         public bool IsMultipleChoice()
         {
             return Type == "multipleChoice" || Type == "hybrid";

@@ -5,14 +5,18 @@
     <div class="card-body">
         @if (_questionLayout.Resources?.Any() ?? false)
         {
-            <div class="card-group">
-                <p>Question resources: </p>
-                @foreach (var resource in _questionLayout.Resources)
-                {
-                    <a class="link-info" href="@resource.ToString()">@resource.ToString().Truncate(8)</a>
-                    <br/>
-                }
-            </div>            
+            <p>Question resources:</p>
+            @foreach (var resource in _questionLayout.Resources)
+            {
+                <a class="link-info" target="_blank" href="@resource.ToString()">@resource.ToString().Truncate(16)</a>
+            }
+        }
+        @if (_questionLayout.ImageResources?.Any() ?? false)
+        {
+            @foreach (var resource in _questionLayout.ImageResources)
+            {
+                <img src="@resource.ToString()"/>
+            }
         }
         @if (_questionLayout.IsMultipleChoice())
         {

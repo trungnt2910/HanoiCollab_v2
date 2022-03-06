@@ -12,6 +12,9 @@ namespace HanoiCollab.Models
         [JsonPropertyName("Resources")]
         public List<Uri> Resources { get; set; }
 
+        [JsonPropertyName("ImageResources")]
+        public List<Uri> ImageResources { get; set; }
+
         [JsonPropertyName("Id")]
         public string Id { get; set; }
 

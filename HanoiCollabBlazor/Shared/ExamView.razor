@@ -4,7 +4,7 @@
 {
     <h3>Exam</h3>
     <p>
-        Provider: <a class="link-primary" href="@_examLayout.OriginalLink.ToString()">@_examLayout.OriginalLink.Host</a>
+        Provider: <a class="link-primary" target="_blank" href="@_examLayout.OriginalLink.ToString()">@_examLayout.OriginalLink.Host</a>
         <br/>
         @if (_examLayout.Resources?.Any() ?? false)
         {
@@ -12,7 +12,7 @@
             <br/>
             foreach (var resource in _examLayout.Resources)
             {
-                <a class="link-info" href="@resource.ToString()">@resource.ToString().Truncate(16)</a>
+                <a class="link-info" target="_blank" href="@resource.ToString()">@resource.ToString().Truncate(16)</a>
                 <br/>
             }
         }
