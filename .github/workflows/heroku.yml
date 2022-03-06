@@ -34,8 +34,15 @@ jobs:
           heroku_email: ${{secrets.HEROKU_EMAIL}}
           justlogin: true
 
-      - name: Push to heroku
+      - name: Set Heroku origin
         run: |
           heroku git:remote -a hanoicollab
+
+      - name: Set Heroku buildpack
+        continue-on-error: true
+        run: |
           heroku buildpacks:set jincod/dotnetcore
+
+      - name: Push to heroku
+        run: |
           git push -f heroku master
