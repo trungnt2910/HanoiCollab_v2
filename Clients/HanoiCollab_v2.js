@@ -585,7 +585,7 @@ function SetupStyles()
     var style = HanoiCollabGlobals.Document.createElement("style");
     style.innerText = 
     `
-    *[id^="hanoicollab-"] {
+    *[id^="hanoicollab-"], *[class^="hanoicollab-"] {
         box-sizing:                  border-box;
         font-family:                 Segoe UI,Segoe WP,Tahoma,Arial,sans-serif;
         font-size:                   14px;
@@ -614,6 +614,61 @@ function SetupStyles()
     }
     `;
     HanoiCollabGlobals.Document.body.appendChild(style);
+}
+
+function AppendStealthModeStyle()
+{
+    var stealthModeStyle = HanoiCollabGlobals.Document.createElement("style");
+    stealthModeStyle.innerText =
+    `
+    *[id^="hanoicollab-"], *[class^="hanoicollab-"] {
+        display:                  none;
+    }
+    `;
+    stealthModeStyle.id = "hanoicollab-stealth-mode-css";
+    HanoiCollabGlobals.Document.body.appendChild(stealthModeStyle);
+}
+
+function RemoveStealthModeStyle()
+{
+    HanoiCollab$("#hanoicollab-stealth-mode-css").remove();
+}
+
+function ToggleStealthMode()
+{
+    HanoiCollabGlobals.IsSteathMode = !HanoiCollabGlobals.IsSteathMode;
+    SetupStealthMode(true);
+}
+
+async function SetupStealthMode(init = false)
+{
+    if (!init)
+    {
+        HanoiCollabGlobals.Document.addEventListener('keyup', function (e)
+        {
+            if (e.altKey && e.key === 'h')
+            {
+                ToggleStealthMode();
+            }
+        }, false);
+        var stealthModeConfig = JSON.parse(await GM_getValue("HanoiCollabStealthConfig", "{}"));
+        if (stealthModeConfig[HanoiCollabGlobals.Provider])
+        {
+            HanoiCollabGlobals.IsSteathMode = stealthModeConfig[HanoiCollabGlobals.Provider];
+        }
+        HanoiCollabGlobals.StealthModeConfig = stealthModeConfig;
+    }
+    if (HanoiCollabGlobals.IsSteathMode)
+    {
+        AppendStealthModeStyle();
+        HanoiCollabGlobals.StealthModeConfig[HanoiCollabGlobals.Provider] = true;
+    }
+    else
+    {
+        RemoveStealthModeStyle();
+        HanoiCollabGlobals.StealthModeConfig[HanoiCollabGlobals.Provider] = false;
+    }
+    await GM_setValue("HanoiCollabStealthConfig", JSON.stringify(HanoiCollabGlobals.StealthModeConfig));
 }
 
 async function WaitForTestReady()
@@ -1596,6 +1651,7 @@ function SetupCommunityAnswersUserInterface()
     }
 
     await SetupSandbox();
+    await SetupStealthMode();
     SetupKeyBindings();
     SetupStyles();
     await SetupServer();
