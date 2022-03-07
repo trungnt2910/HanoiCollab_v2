@@ -1191,13 +1191,26 @@ function SetupElementHooks()
 
     if (HanoiCollabGlobals.Provider == "shub.edu.vn")
     {
+        var inputAnsKey = HanoiCollabGlobals.Document.getElementById("inputAnsKey");
         new MutationObserver(function(mutations)
         {
             for (var mutation of mutations)
             {
                 Update(HanoiCollabGlobals.Questions[Number.parseInt(mutation.oldValue.substring("Đáp án câu ".length)) - 1]);
             }
-        }).observe(HanoiCollabGlobals.Document.getElementById("inputAnsKey"), {subtree: false, childList: false, attributes: true, attributeOldValue : true, attributeFilter: ["placeholder"]})
+        }).observe(inputAnsKey, {subtree: false, childList: false, attributes: true, attributeOldValue : true, attributeFilter: ["placeholder"]})
+        // Very annoying and covers community answers.
+        inputAnsKey.setAttribute("autocomplete", "off");
+        inputAnsKey.addEventListener("blur", function()
+        {
+            for (let q of questions)
+            {
+                if (q.HtmlElement.style.border.startsWith("2px"))
+                {
+                    Update(q);
+                }
+            }
+        });
     }
 }
 
@@ -1462,6 +1475,11 @@ async function SetupExamConnection()
         if (question.CommunityAnswers[onlineQuestion.Answer])
         {
             question.CommunityAnswers[onlineQuestion.Answer].push(onlineQuestion.UserId);
+            var idx = question.CommunityAnswers.findIndex(function (ans){return ans.User == onlineQuestion.UserId;});
+            if (idx != -1)
+            {
+                question.CommunityAnswers.splice(idx, 1);
+            }
         }
         // Prevent null answers, which are actually deletions.
         else if (onlineQuestion.Answer)

@@ -53,7 +53,8 @@ namespace HanoiCollab.Hubs
                 }
                 var oldAnswer = await _questionsService.UpdateAnswer(userName, examId, questionId, answer);
                 // This is either the letters (A, B, C, D) or some client-provided hash.
-                if (answer.Length <= 32)
+                // Always provide multiple choice old answers so clients can delete them.
+                if (oldAnswer.Length <= 32)
                 {
                     info.OldAnswer = oldAnswer;
                 }
