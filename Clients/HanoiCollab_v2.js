@@ -17,6 +17,8 @@
 // @match        https://forms.office.com/Pages/ResponsePage.aspx?*
 // @match        https://shub.edu.vn/*
 // @match        https://azota.vn/*
+// @match        https://quilgo.com/*
+// @match        https://docs.google.com/forms/*
 // ==/UserScript==
 
 String.prototype.getHashCode = function() {
@@ -313,7 +315,7 @@ async function SetupChatUserInterface()
     HanoiCollab$("#hanoicollab-chat-container").remove();
 
     HanoiCollab$("body").append (`
-    <div id="hanoicollab-chat-container" class="hanoicollab-basic-container" style="position:fixed;right:16;bottom:16;height:20%;width:30%;border-radius:1ex;background-color:rgba(0,127,255,0.9);z-index:9997;user-select:text">
+    <div id="hanoicollab-chat-container" class="hanoicollab-basic-container" style="position:fixed;right:16px;bottom:16px;height:20%;width:30%;border-radius:1ex;background-color:rgba(0,127,255,0.9);z-index:9997;user-select:text">
         <div id="hanoicollab-chat-messages" style="width:100%;height:90%;overflow:auto;"></div>
         <input type="text" autocomplete="off" id="hanoicollab-chat-input" style="width:100%;bottom:-10%;position:absolute">
     </div>
@@ -336,7 +338,7 @@ async function SetupChatUserInterface()
 
     HanoiCollabGlobals.ChatConnection.on("ReceiveMessage", function(name, message)
     {
-        HanoiCollab$("#hanoicollab-chat-messages").append(`<p class="hanoicollab-basic-container" style="user-select:text;"><b>${EscapeHtml(name)}</b>: ${EscapeHtml(message)}</p>`);
+        HanoiCollab$("#hanoicollab-chat-messages").append(`<p class="hanoicollab-basic-container" style="user-select:text;word-wrap: break-word;"><b>${EscapeHtml(name)}</b>: ${EscapeHtml(message)}</p>`);
         HanoiCollab$("#hanoicollab-chat-messages").animate({scrollTop: HanoiCollab$("#hanoicollab-chat-messages").prop("scrollHeight")}, 1000);
     })
 
@@ -353,6 +355,10 @@ async function SetupChatUserInterface()
 
 async function WaitForDocumentReady()
 {
+    if (document.readyState === 'complete')
+    {
+        return;
+    }
     await new Promise(function(resolve, reject)
     {
         $("document").ready(function()
@@ -446,11 +452,89 @@ HanoiCollabScriptPatches = {
                 .replace("function f(n){var r=(0,o.cF)", "function f(n){window.HanoiCollabExposedVariables=window.HanoiCollabExposedVariables||[];window.HanoiCollabExposedVariables.UpdateLocalStorage=f;var r=(0,o.cF)");
         }
         return code;
+    },
+    "quilgo.com": function(src, code)
+    {
+        if (src.includes("collector.min"))
+        {
+            code = code .replace(`this.checkAndHandleUnfocused=()=>{`, `this.checkAndHandleUnfocused=()=>{console.log("Blocked monitor action.");return;`);
+        }
+        if (src.includes("link.js"))
+        {
+            code = code .replace(/\/api/g, top.window.location.origin + "/api")
+                        .replace(/\/stream/g, top.window.location.origin + "/stream");
+        }
+        return code;
+    },
+    "docs.google.com": function(src, code)
+    {
+        // This _should_ allow Google Forms accept the sandbox,
+        // however many stuff are messed up so we dropped the sandbox
+        // for Google Forms.
+        if (src.includes("viewer_base"))
+        {
+            code = `
+                function setupHook(xhr) {
+                    function getter() {
+                        console.log('get responseText');
+                
+                        delete xhr.responseText;
+                        var ret = xhr.responseText;
+                        if (ret.includes("history.replaceState"))
+                        {
+                            ret = "window.history.replaceState=function(){};console.log(window.history);" + ret;
+                            ret = ret   .replace(/=history\\.pushState/, "=window.parent.history.pushState")
+                                        .replace(/=history\\.replaceState/, "=function(){}");    
+                        }
+                        setup();
+                        return ret;
+                    }
+                
+                    function setter(str) {
+                        console.log('set responseText: %s', str);
+                    }
+                
+                    function setup() {
+                        Object.defineProperty(xhr, 'responseText', {
+                            get: getter,
+                            set: setter,
+                            configurable: true
+                        });
+                    }
+                    setup();
+                }
+
+                XMLHttpRequest.prototype.oldOpen = XMLHttpRequest.prototype.open;
+                XMLHttpRequest.prototype.open = function(method, url, async, user, password)
+                {
+                    console.log(url);
+                    if (!this._HanoiCollabHooked) {
+                        this._HanoiCollabHooked = true;
+                        setupHook(this);
+                    }
+                    XMLHttpRequest.prototype.oldOpen.call(this, method, url, async, user);
+                }
+            ` + code;
+            code =  code.replace(/impressionBatch:[^}]+/g, "impressionBatch: []")
+                        .replace(/this.j.send\(a\)/, "this.j.send((function(a){console.log(a);return a;})(a))")
+                        .replace(/document\.getElementById\("base-js\"\)\)&&\([A-Za-z]\=[A-Za-z]\.src\?[A-Za-z]\.src.+?length-1]\.src/g, match => match.replace(/\.src/g, `.getAttribute("originalSrc")`));
+        }
+        return code;
     }
 };
 
 async function SetupSandbox()
 {
+    // Google is way too complex. Leave it alone.
+    // We don't have to intercept any form state variables: They're all present in the DOM.
+    if (HanoiCollabGlobals.Provider == "docs.google.com")
+    {
+        HanoiCollabGlobals.Document = document;
+        HanoiCollabGlobals.Window = unsafeWindow;
+
+        return new Promise((resolve) => resolve(document));
+    }
+
     var style = window.document.createElement("style");
     style.innerText = `body {
        margin: 0;
@@ -503,6 +587,7 @@ async function SetupSandbox()
             var scriptContent = HanoiCollabScriptPatches[HanoiCollabGlobals.Provider](scriptSource, PatchWindowAccess(request.responseText));
             var scriptBlob = new Blob([scriptContent], {type: "application/javascript"});
             script.src = URL.createObjectURL(scriptBlob);
+            script.setAttribute("originalSrc", scriptSource);
         }
     
         if (script.textContent)
@@ -525,7 +610,7 @@ async function SetupSandbox()
         {
             if (!href.startsWith("http"))
             {
-                elem.setAttribute("href", top.location.origin + href);
+                elem.setAttribute("href", location.origin + href);
             }  
         }
         if (src)
@@ -536,7 +621,8 @@ async function SetupSandbox()
             }
             if (!src.startsWith("http"))
             {
-                elem.setAttribute("src", top.location.origin + src);
+                elem.setAttribute("src", location.origin + src);
+                elem.setAttribute("originalSrc", src);
             }  
         }
     }
@@ -761,6 +847,31 @@ async function WaitForTestReady()
                 });
             }
             break;
+            case "quilgo.com":
+            {
+                // We do not care about Quilgo: It's a freaking iframe,
+                // Tampermonkey will access the iframe.
+                resolve(false);
+            }
+            break;
+            case "docs.google.com":
+            {
+                if (!window.location.href.includes("/viewform"))
+                {
+                    resolve(false);
+                    return;
+                }
+                var interval = setInterval(function()
+                {
+                    if (HanoiCollabGlobals.Document.querySelectorAll("form").length)
+                    {
+                        clearInterval(interval);
+                        resolve(true);
+                        return;
+                    }
+                });
+            }
+            break;
             default:
                 resolve(false);
         }
@@ -777,6 +888,8 @@ function GetFormId()
             return "" + HanoiCollabGlobals.Window.HanoiCollabExposedVariables.FormState.$$.$H;
         case "shub.edu.vn":
             return "" + top.location.href.match(/homework\/([\d]+?)\/test/)[1];
+        case "docs.google.com":
+            return "" + window.location.href.match(`https:\/\/docs\.google\.com\/forms\/d\/e\/(.*?)\/viewform.*`)[1];
         default:
             return "";
     }
@@ -857,7 +970,22 @@ class QuestionInfo
         if (HanoiCollabGlobals.ExamConnection)
         {
             var info = this;
-            await HanoiCollabGlobals.ExamConnection.invoke("UpdateAnswer", GetFormId(), info.Id, answer);    
+            if (info.SendUserTimeOut)
+            {
+                info.NeedsUpdate = true;
+                return;
+            }
+            info.SendUserTimeOut = true;
+            info.NeedsUpdate = false;
+            await HanoiCollabGlobals.ExamConnection.invoke("UpdateAnswer", GetFormId(), info.Id, answer);
+            setTimeout(function()
+            {
+                info.SendUserTimeOut = false;
+                if (info.NeedsUpdate)
+                {
+                    info.SendUserAnswer(info.GetUserAnswer());
+                }
+            }, 1000);
         }
     }
 
@@ -883,15 +1011,16 @@ class QuestionInfo
         if (info.IsMultipleChoice())
         {
             var communityAnswers = info.CommunityAnswers;
+            var multipleChoice = communityAnswers.MultipleChoice;
             var communityAnswersHtml = info.CommunityAnswersHtml;
             var multipleChoiceHtml = communityAnswersHtml.querySelector(".hanoicollab-community-answers-multiple-choice-contents");
             var elem = HanoiCollabGlobals.Document.createElement("div");
-            for (var key of Object.keys(communityAnswers).sort(function(key1, key2){return communityAnswers[key1].Alpha.localeCompare(communityAnswers[key2].Alpha)}))
+            for (var key of Object.keys(multipleChoice).sort(function(key1, key2){return multipleChoice[key1].Alpha.localeCompare(multipleChoice[key2].Alpha)}))
             {
-                if (communityAnswers[key].Alpha)
+                if (multipleChoice[key].Alpha)
                 {
                     var p = HanoiCollabGlobals.Document.createElement("p");
-                    p.innerHTML = `<b>${communityAnswers[key].Alpha}</b> (${communityAnswers[key].length}): ${EscapeHtml(communityAnswers[key].slice(0, Math.min(communityAnswers[key].length, 10)).join(", "))}`;
+                    p.innerHTML = `<b>${multipleChoice[key].Alpha}</b> (${multipleChoice[key].length}): ${EscapeHtml(multipleChoice[key].slice(0, Math.min(multipleChoice[key].length, 10)).join(", "))}`;
                     elem.appendChild(p);
                 }
             }
@@ -1130,6 +1259,10 @@ function GetQuestions()
                     var info = this;
                     var text = this.HtmlElement.getElementsByTagName("p")[0].innerText;
                     var colonIndex = text.indexOf(":");
+                    if (colonIndex == -1)
+                    {
+                        return null;
+                    }
                     text = text.substr(colonIndex + 1);
                     if (!text)
                     {
@@ -1161,6 +1294,95 @@ function GetQuestions()
                 result.push(info);
             }
             return result;
+        }
+        case "docs.google.com":
+        {
+            var result = [];
+            var questions = HanoiCollabGlobals.Window.FB_PUBLIC_LOAD_DATA_[1][1];
+            var questionElements = document.querySelectorAll("[role=\"listitem\"]");
+            for (let i = 0; i < questions.length; ++i)
+            {
+                var q = questions[i];
+                var qElem = questionElements[i];
+                var currentQuestionType = null;
+                switch (q[3])
+                {
+                    case 0:
+                        currentQuestionType = "hybrid";
+                    break;
+                    case 1:
+                        currentQuestionType = "written";
+                    break;
+                    case 2:
+                        currentQuestionType = "multipleChoice";
+                    break;
+                }
+                if (currentQuestionType == null)
+                {
+                    continue;
+                }
+                var currentQuestionId = "" + q[4][0][0];
+                var info = new QuestionInfo(qElem, currentQuestionId, currentQuestionType, i);
+                if (currentQuestionType == "multipleChoice")
+                {
+                    var answers = q[4][0][1];
+                    var alpha = "A";
+                    for (let j = 0; j < answers.length; ++j)
+                    {
+                        var a = answers[j];
+                        info.Answers.push({Id: "" + a[0].getHashCode(), Alpha: String.fromCharCode(alpha.charCodeAt(0) + j)});
+                    }
+                }
+                else if (currentQuestionType == "hybrid")
+                {
+                    var alpha = "A";
+                    for (let j = 0; j < 4; ++j)
+                    {
+                        info.Answers.push({Id: String.fromCharCode(alpha.charCodeAt(0) + j), Alpha: String.fromCharCode(alpha.charCodeAt(0) + j)});
+                    }
+                }
+
+                info.GetUserAnswer = function()
+                {
+                    var info = this;
+                    var input = HanoiCollab$("[name=\"entry." + info.Id + "\"]")[0];
+                    var content = input?.value;
+                    if (!content || content.length == 0)
+                    {
+                        return null;
+                    }
+                    if (info.Type == "multipleChoice")
+                    {
+                        return content.getHashCode();
+                    }
+                    else
+                    {
+                        return content;
+                    }
+                }
+
+                info.SetUserAnswer = function(answer)
+                {
+                    if (this.SendUserAnswer)
+                    {
+                        this.SendUserAnswer(answer);
+                    }
+                }
+
+                info.ClearUserAnswer = function()
+                {
+                    var info = this;
+                    var input = HanoiCollab$("[name=\"entry." + info.Id + "\"]")[0];
+                    input.value = "";
+                    if (info.Type == "multipleChoice")
+                    {
+                        input.remove();
+                    }
+                }
+
+                result.push(info);
+            }
+            return result;            
         }
         default:
         {
@@ -1230,11 +1452,11 @@ function SetupElementHooks()
                 // We don't add clear buttons for SHUB.
                 q.HtmlElement.addEventListener("click", function()
                 {
-                    setTimeout(function()
-                    {
-                        q.HtmlElement.closest(".MuiBox-root").querySelector(".hanoicollab-community-answers").remove();
-                        q.HtmlElement.closest(".MuiBox-root").appendChild(q.CommunityAnswersHtml);
-                    }, 100);
+                    // setTimeout(function()
+                    // {
+                    //     q.HtmlElement.closest(".MuiBox-root").querySelector(".hanoicollab-community-answers").remove();
+                    //     q.HtmlElement.closest(".MuiBox-root").appendChild(q.CommunityAnswersHtml);
+                    // }, 100);
                 });
             }
             break;
@@ -1252,6 +1474,8 @@ function SetupElementHooks()
             for (var mutation of mutations)
             {
                 Update(HanoiCollabGlobals.Questions[Number.parseInt(mutation.oldValue.substring("Đáp án câu ".length)) - 1]);
+                mutation.target.closest(".MuiBox-root").querySelector(".hanoicollab-community-answers")?.remove();
+                mutation.target.closest(".MuiBox-root").appendChild(HanoiCollabGlobals.Questions[Number.parseInt(mutation.target.placeholder.substring("Đáp án câu ".length)) - 1].CommunityAnswersHtml);
             }
         }).observe(inputAnsKey, {subtree: false, childList: false, attributes: true, attributeOldValue : true, attributeFilter: ["placeholder"]})
         // Very annoying and covers community answers.
@@ -1266,6 +1490,29 @@ function SetupElementHooks()
                 }
             }
         });
+    }
+
+    if (HanoiCollabGlobals.Provider == "docs.google.com")
+    {
+        var inputCollection = HanoiCollabGlobals.Document.querySelector("form").querySelector("input").parentElement;
+        new MutationObserver(function(mutations)
+        {
+            var ids = [];
+            for (var mutate of mutations)
+            {
+                if (mutate.target?.name?.includes("entry"))
+                {
+                    ids[mutate.target.name.substring("entry.".length)] = true;
+                }
+            }
+            for (let q of questions)
+            {
+                if (ids[q.Id])
+                {
+                    Update(q);
+                }
+            }
+        }).observe(inputCollection, {subtree: true, childList: true, attributes: true, attributeOldValue : true, attributeFilter: ["value"]})
     }
 }
 
@@ -1298,7 +1545,7 @@ class ExamLayout
 {
     constructor()
     {
-        this.OriginalLink = top.window.location.href;
+        this.OriginalLink = window.location.href;
         this.Resources = this.ExtractResources();
         this.Questions = this.ExtractQuestions();
     }
@@ -1313,6 +1560,22 @@ class ExamLayout
                 {
                     return c.indexOf(a) === b;
                 });   
+            }
+            case "docs.google.com":
+            {
+                var result = [];
+                // return result;
+                for (var item of Array.from(HanoiCollabGlobals.Document.querySelectorAll("*")).filter(i => i.getAttribute("role") == "listitem"))
+                {
+                    // All items without any choices:
+                    if (!item.querySelectorAll("input").length && 
+                        !item.querySelectorAll("textarea").length && 
+                        !item.querySelectorAll("label").length)
+                    {
+                        result.push(...Array.from(item.querySelectorAll("img,iframe")).map(i => i.src));
+                    }
+                }
+                return result;
             }
             default:
             {
@@ -1437,6 +1700,70 @@ class ExamLayout
                 return result;
             }
             break;
+            case "docs.google.com":
+            {
+                var result = [];
+                var questions = HanoiCollabGlobals.Window.FB_PUBLIC_LOAD_DATA_[1][1];
+                var questionElements = document.querySelectorAll("[role=\"listitem\"]");
+                for (let i = 0; i < questions.length; ++i)
+                {
+                    var q = questions[i];
+                    var qElem = questionElements[i];
+                    var currentQuestionType = null;
+                    switch (q[3])
+                    {
+                        case 0:
+                            currentQuestionType = "hybrid";
+                        break;
+                        case 1:
+                            currentQuestionType = "written";
+                        break;
+                        case 2:
+                            currentQuestionType = "multipleChoice";
+                        break;
+                    }
+                    if (currentQuestionType == null)
+                    {
+                        continue;
+                    }
+                    var currentQuestionDescription = q[1];
+                    var currentQuestionId = "" + q[4][0][0];
+                    var currentQuestionAnswers = [];
+                    var resourcesInAnswers = [];
+                    if (currentQuestionType == "multipleChoice")
+                    {
+                        var answers = q[4][0][1];
+                        var answerElements = qElem.querySelectorAll("label");
+                        var alpha = "A";
+                        for (let j = 0; j < answers.length; ++j)
+                        {
+                            var a = answers[j];
+                            var aElem = answerElements[j];
+                            var imageResources = Array.from(aElem.querySelectorAll("img")).map(i => i.src);
+                            var resources = Array.from(aElem.querySelectorAll("iframe")).map(i => i.src);
+                            resourcesInAnswers.push(...imageResources);
+                            resourcesInAnswers.push(...resources);
+                            currentQuestionAnswers.push(new AnswerLayout(a[0], resources, a[0].getHashCode(), String.fromCharCode(alpha.charCodeAt(0) + j), imageResources));
+                        }
+                    }
+                    else if (currentQuestionType == "hybrid")
+                    {
+                        var alpha = "A";
+                        for (let j = 0; j < 4; ++j)
+                        {
+                            currentQuestionAnswers.push(new AnswerLayout("", null, String.fromCharCode(alpha.charCodeAt(0) + j), String.fromCharCode(alpha.charCodeAt(0) + j), null));
+                        }
+                    }
+                    
+                    var currentQuestionImageResources = Array.from(qElem.querySelectorAll("img")).map(i => i.src).filter(i => !resourcesInAnswers.includes(i));
+                    var currentQuestionResources = Array.from(qElem.querySelectorAll("iframe")).map(i => i.src).filter(i => !resourcesInAnswers.includes(i));
+
+                    result.push(new QuestionLayout(currentQuestionType, currentQuestionDescription, currentQuestionId, currentQuestionAnswers, currentQuestionResources, currentQuestionImageResources));
+                }
+                return result;
+            }
+            default:
+                return [];
         }
     }
 }
@@ -1465,10 +1792,11 @@ async function SetupExamConnection()
 
             if (q.IsMultipleChoice())
             {
+                q.CommunityAnswers.MultipleChoice = [];
                 for (var a of q.Answers)
                 {
-                    q.CommunityAnswers[a.Id] = [];
-                    q.CommunityAnswers[a.Id].Alpha = a.Alpha; 
+                    q.CommunityAnswers.MultipleChoice[a.Id] = [];
+                    q.CommunityAnswers.MultipleChoice[a.Id].Alpha = a.Alpha; 
                 }
             }
         }
@@ -1479,9 +1807,9 @@ async function SetupExamConnection()
             {
                 return q.Id == onlineQuestions[i].QuestionId;
             });
-            if (question.CommunityAnswers[onlineQuestions[i].Answer])
+            if (question.CommunityAnswers.MultipleChoice[onlineQuestions[i].Answer])
             {
-                question.CommunityAnswers[onlineQuestions[i].Answer].push(onlineQuestions[i].UserId);
+                question.CommunityAnswers.MultipleChoice[onlineQuestions[i].Answer].push(onlineQuestions[i].UserId);
             }
             else
             {
@@ -1511,26 +1839,26 @@ async function SetupExamConnection()
 
         if (onlineQuestion.OldAnswer)
         {
-            if (question.CommunityAnswers[onlineQuestion.OldAnswer])
+            if (question.CommunityAnswers.MultipleChoice[onlineQuestion.OldAnswer])
             {
-                var arr = question.CommunityAnswers[onlineQuestion.OldAnswer];
+                var arr = question.CommunityAnswers.MultipleChoice[onlineQuestion.OldAnswer];
                 arr.splice(arr.indexOf(onlineQuestion.UserId), 1);
             }
             // null answer, must delete.
             else if (!onlineQuestion.Answer)
             {
                 var arr = question.CommunityAnswers;
-                var idx = arr.findIndex(function(ans){return ans.User == onlineQuestion.UserId;});
+                var idx = arr.findIndex(function(ans){return ans?.User == onlineQuestion.UserId;});
                 if (idx != -1)
                 {
                     arr.splice(idx, 1);
                 }
             }
         }
-        if (question.CommunityAnswers[onlineQuestion.Answer])
+        if (question.CommunityAnswers.MultipleChoice[onlineQuestion.Answer])
         {
-            question.CommunityAnswers[onlineQuestion.Answer].push(onlineQuestion.UserId);
-            var idx = question.CommunityAnswers.findIndex(function (ans){return ans.User == onlineQuestion.UserId;});
+            question.CommunityAnswers.MultipleChoice[onlineQuestion.Answer].push(onlineQuestion.UserId);
+            var idx = question.CommunityAnswers.findIndex(function (ans){return ans?.User == onlineQuestion.UserId;});
             if (idx != -1)
             {
                 question.CommunityAnswers.splice(idx, 1);
@@ -1631,7 +1959,7 @@ function SetupCommunityAnswersUserInterface()
 
 (async function() 
 {
-    if (!(top === self))
+    if (window.location.origin.startsWith("blob"))
     {
         return;
     }
