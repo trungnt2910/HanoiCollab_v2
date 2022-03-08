@@ -1071,7 +1071,7 @@ class QuestionInfo
             var writtenSelect = communityAnswersHtml.querySelector(".hanoicollab-community-answers-written-select");
             var newSelect = HanoiCollabGlobals.Document.createElement("select");
             for (var ans of communityAnswers.sort(
-                function(a, b){return (a.Answer.length != b.Answer.length) ? a.Answer.length - b.Answer.length : a.User.localeCompare(b.User)}))
+                function(a, b){return (a.Answer.length != b.Answer.length) ? b.Answer.length - a.Answer.length : a.User.localeCompare(b.User)}))
             {
                 var option = HanoiCollabGlobals.Document.createElement("option");
                 option.value = ans.User;
