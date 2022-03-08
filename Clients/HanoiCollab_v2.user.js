@@ -529,9 +529,9 @@ function PatchElement(element)
     {
         case "quilgo.com":
         {
-            if (element.tagName === "BUTTON" && element.classList.contains("auth-via-email-submit"))
+            if (element.classList.contains("form-submitted"))
             {
-                // element.setAttribute("onclick", `(function(){var value = document.querySelector(".auth-via-email-input").value; parent.location.href = \`\$\{parent.location.protocol\}//\$\{parent.location.host\}\$\{parent.location.pathname\}?email=\$\{value\}\`})()`);
+                element.remove();
             }
         }
         break;
