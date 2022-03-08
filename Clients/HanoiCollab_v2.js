@@ -459,7 +459,7 @@ HanoiCollabScriptPatches = {
         {
             code = code .replace(`this.checkAndHandleUnfocused=()=>{`, `this.checkAndHandleUnfocused=()=>{console.log("Blocked monitor action.");return;`);
         }
-        if (src.includes("link.js"))
+        if (src.includes("link.js") || src.includes("app.js") || src.includes("form.js"))
         {
             code = code .replace(/\/api/g, top.window.location.origin + "/api")
                         .replace(/\/stream/g, top.window.location.origin + "/stream");
@@ -523,6 +523,21 @@ HanoiCollabScriptPatches = {
     }
 };
 
+function PatchElement(element)
+{
+    switch (HanoiCollabGlobals.Provider)
+    {
+        case "quilgo.com":
+        {
+            if (element.tagName === "BUTTON" && element.classList.contains("auth-via-email-submit"))
+            {
+                // element.setAttribute("onclick", `(function(){var value = document.querySelector(".auth-via-email-input").value; parent.location.href = \`\$\{parent.location.protocol\}//\$\{parent.location.host\}\$\{parent.location.pathname\}?email=\$\{value\}\`})()`);
+            }
+        }
+        break;
+    }
+}
+
 async function SetupSandbox()
 {
     // Google is way too complex. Leave it alone.
@@ -533,6 +548,18 @@ async function SetupSandbox()
         HanoiCollabGlobals.Window = unsafeWindow;
 
         return new Promise((resolve) => resolve(document));
+    }
+    else if (HanoiCollabGlobals.Provider == "quilgo.com")
+    {
+        // There's some _urrh_ Google Captcha bullshit on this page.
+        // We also want to steer clear of it.
+        if (document.querySelector("[class='auth-via-email-submit']"))
+        {
+            HanoiCollabGlobals.Document = document;
+            HanoiCollabGlobals.Window = unsafeWindow;
+    
+            return new Promise((resolve) => resolve(document));    
+        }
     }
 
     var style = window.document.createElement("style");
@@ -582,7 +609,7 @@ async function SetupSandbox()
         }
         if (script.src)
         {
-            var scriptSource = script.src;
+            var scriptSource = script.getAttribute("src");
             var request = await Download(scriptSource);
             var scriptContent = HanoiCollabScriptPatches[HanoiCollabGlobals.Provider](scriptSource, PatchWindowAccess(request.responseText));
             var scriptBlob = new Blob([scriptContent], {type: "application/javascript"});
@@ -621,8 +648,17 @@ async function SetupSandbox()
             }
             if (!src.startsWith("http"))
             {
-                elem.setAttribute("src", location.origin + src);
-                elem.setAttribute("originalSrc", src);
+                // Sus.
+                if (src.startsWith("//"))
+                {
+                    elem.setAttribute("src", "https:" + src);
+                    elem.setAttribute("originalSrc", src);
+                }
+                else
+                {
+                    elem.setAttribute("src", location.origin + src);
+                    elem.setAttribute("originalSrc", src);    
+                }
             }  
         }
     }
@@ -631,6 +667,7 @@ async function SetupSandbox()
     {
         PatchLocation(elem);
         await PatchScript(elem);
+        PatchElement(elem);
     }
 
     var blob = new Blob([htmlDoc.documentElement.outerHTML], {type: "text/html"});
