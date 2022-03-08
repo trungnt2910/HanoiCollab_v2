@@ -1410,10 +1410,36 @@ function GetQuestions()
                 {
                     var info = this;
                     var input = HanoiCollab$("[name=\"entry." + info.Id + "\"]")[0];
-                    input.value = "";
-                    if (info.Type == "multipleChoice")
+                    // Clear from DOM
+                    if (input)
                     {
-                        input.remove();
+                        input.value = "";   
+                        if (info.Type == "multipleChoice")
+                        {
+                            input.remove();
+                        }
+                    }
+
+                    // Clear from UI
+                    if (info.IsWritten())
+                    {
+                        var writeArea = info.HtmlElement.querySelector("input,textarea");
+                        if (writeArea)
+                        {
+                            writeArea.value = "";
+                            writeArea.dispatchEvent(new InputEvent("input", {bubbles: true}));
+                        }
+                    }
+                    else
+                    {
+                        var elem = info.HtmlElement.querySelector("[aria-checked='true']");
+                        if (elem)
+                        {
+                            elem.setAttribute("aria-checked", "false");
+                            elem.setAttribute("tabindex", "-1");
+                            var clazz = elem.classList[elem.classList.length - 1];
+                            elem.classList.remove(clazz);    
+                        }
                     }
                 }
 
@@ -1446,6 +1472,7 @@ function SetupElementHooks()
         var button = HanoiCollabGlobals.Document.createElement("button");
         button.innerText = "Clear";
         button.className = "hanoicollab-clear-button";
+        button.type = "button";
         button.addEventListener("click", function() {q.ClearUserAnswer();});
         q.HtmlElement.appendChild(button);    
     }
@@ -1497,6 +1524,10 @@ function SetupElementHooks()
                 });
             }
             break;
+            case "docs.google.com":
+            {
+                AddButton(q);
+            }
             default:
             break;
         }
