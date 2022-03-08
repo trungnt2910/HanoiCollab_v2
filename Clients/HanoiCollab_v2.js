@@ -1826,6 +1826,7 @@ async function SetupExamConnection()
         for (var q of questions)
         {
             q.CommunityAnswers = [];
+            q.CommunityAnswers.MultipleChoice = [];
 
             if (q.IsMultipleChoice())
             {
