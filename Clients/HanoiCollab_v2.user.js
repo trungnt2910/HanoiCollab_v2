@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         HanoiCollab_v2
 // @namespace    https://trungnt2910.github.io/
-// @version      0.0.1
+// @version      0.0.2
 // @description  HanoiCollab client for Second Generation HanoiCollab server
 // @author       trungnt2910
 // @license      MIT
