@@ -98,19 +98,6 @@ async function LoginPopup(displayText)
                 <input class="hanoicollab-basic-container" type="text" id="hanoicollab-username" style="color:black;" value="${oldUsername}">                           
                 <input class="hanoicollab-basic-container" type="password" id="hanoicollab-password" style="color:black;" value="">
 
-                <style>
-                    .hanoicollab-button {
-                        background-color:       rgba(0,127,127,0.9);
-                        border:                 1px solid black;
-                        border-radius:          1ex;
-                        padding:                0.5em;
-                        color:                  white;
-                        cursor:                 pointer;
-                        line-height:            1.5;
-                        text-transform:         unset !important;
-                    }
-                </style>
-
                 <p class="hanoicollab-basic-container" id="hanoicollab-login-status">Please enter your HanoiCollab username and password.</p>
                 <button class="hanoicollab-button" id="hanoicollab-login-button">Login</button>
                 <button class="hanoicollab-button" id="hanoicollab-register-button">Register</button>
@@ -457,7 +444,19 @@ HanoiCollabScriptPatches = {
     {
         if (src.includes("collector.min"))
         {
-            code = code .replace(`this.checkAndHandleUnfocused=()=>{`, `this.checkAndHandleUnfocused=()=>{console.log("Blocked monitor action.");return;`);
+            code = code
+                // PLASM: Block focus tracking
+                .replace(`this.checkAndHandleUnfocused=()=>{`, `this.checkAndHandleUnfocused=()=>{console.log("Blocked monitor action.");return;`)
+                // PLASM: Allow sharing one tab
+                .replace(/getSelectedArea\([A-Za-z,]*?\){/g, match => match + `return "monitor";`);
+
+            if (HanoiCollabGlobals.EnableTrackingPrevention)
+            {
+                code = code .replace(/(new Promise\(\()(\(.,.\))/, "$1 async $2")
+                            // Here, we hardcode the interval to 5000 to allow students to have more time preparing their screens.
+                            .replace(/validateOptions\(t\){/g, "validateOptions(t){if (t.interval) {window.HanoiCollabExposedVariables = window.HanoiCollabExposedVariables || []; window.HanoiCollabExposedVariables.OldIntervals = window.HanoiCollabExposedVariables.OldIntervals || {}; window.HanoiCollabExposedVariables.OldIntervals[t.id] = t.interval; t.interval = 5000;}")
+                            .replace(/JSON\.stringify\(([^\)]*?)\.payload\)/, `(await (async function(t){if(!window.HanoiCollabExposedVariables?.HanoiCollabApproveRequest){throw "HanoiCollab blocked";} await window.HanoiCollabExposedVariables.HanoiCollabApproveRequest(t); return JSON.stringify(t.payload);})($1))`)
+            }
         }
         if (src.includes("link.js") || src.includes("app.js") || src.includes("form.js"))
         {
@@ -532,6 +531,22 @@ function PatchElement(element)
             if (element.classList.contains("form-submitted"))
             {
                 element.remove();
+            }
+            if (element.classList.contains("plasm-caliber"))
+            {
+                var parser = new DOMParser();
+                var doc = parser.parseFromString(
+                    `
+                    <div class="hanoicollab-basic-container" style="color:red;">
+                        <b>This is a screen-monitored exam! Please remember to enable Stealth Mode (by pressing Alt + H) before proceeding.</b>
+                        </br>
+                        <b>Furthermore, to prevent HanoiCollab's sign in popup to appear during the test, if you haven't logged in for more than 20 hours, please renew your 
+                        session by pressing Alt + L and entering your username and password in the dialog box.</b>
+                        <h4>Good luck, and have fun!</h4>
+                    </div>
+                    `
+                , "text/html").body.firstChild;
+                element.appendChild(doc);
             }
         }
         break;
@@ -734,6 +749,16 @@ function SetupStyles()
     }
     .hanoicollab-basic-container p {
         margin:                     0;
+    }
+    .hanoicollab-button {
+        background-color:       rgba(0,127,127,0.9);
+        border:                 1px solid black;
+        border-radius:          1ex;
+        padding:                0.5em;
+        color:                  white;
+        cursor:                 pointer;
+        line-height:            1.5;
+        text-transform:         unset !important;
     }
     `;
     HanoiCollabGlobals.Document.body.appendChild(style);
@@ -2026,6 +2051,137 @@ function SetupCommunityAnswersUserInterface()
     }
 }
 
+async function DisplayPopup(element, urgent)
+{
+    while (HanoiCollabGlobals.NoticePopupPromise)
+    {
+        await HanoiCollabGlobals.NoticePopupPromise;
+    }
+
+    HanoiCollabGlobals.NoticePopupPromise = new Promise(async function(resolve, reject)
+    {
+        var needsReToggle = false;
+
+        if (urgent && HanoiCollabGlobals.IsSteathMode)
+        {
+            needsReToggle = true;
+            ToggleStealthMode();
+        }
+
+        //--- Use jQuery to add the form in a "popup" dialog.
+        HanoiCollab$(HanoiCollabGlobals.Document.body).append (`
+        <div id="hanoicollab-notice-popup-container" class="hanoicollab-basic-container">
+            <p id="hanoicollab-notice-popup-background" style="position:fixed;top:0;left:0;right:0;bottom:0;background-color:rgba(0,0,0,0.9);z-index:9998;"></p>      
+            <div id="hanoicollab-notice-popup" style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:50%;padding:2em;color:white;background-color:rgba(0,127,255,0.75);border-radius:1ex;z-index:9999;">
+            ${element.outerHTML}
+            </div>
+        </div>
+        `);
+
+        for (let button of HanoiCollabGlobals.Document.getElementById("hanoicollab-notice-popup").getElementsByTagName("button"))
+        {
+            button.onclick = function()
+            {
+                if (needsReToggle)
+                {
+                    ToggleStealthMode();
+                }
+                HanoiCollab$("#hanoicollab-notice-popup-container").remove();
+                HanoiCollabGlobals.NoticePopupPromise = null;
+                resolve(button.value);
+            }
+        }
+    });
+
+    return await HanoiCollabGlobals.NoticePopupPromise;
+}
+
+function SetupTrackingPrevention()
+{
+    HanoiCollabGlobals.Window.HanoiCollabExposedVariables = HanoiCollabGlobals.Window.HanoiCollabExposedVariables || []; 
+    HanoiCollabGlobals.Window.HanoiCollabExposedVariables.HanoiCollabApproveRequest = async function(data)
+    {
+        switch (HanoiCollabGlobals.Provider)
+        {
+            case "quilgo.com":
+            {
+                if (data.path == "snapshots" || data.path == "screenshots")
+                {
+                    if (HanoiCollabGlobals.AlwaysBlockImage && HanoiCollabGlobals.AlwaysBlockImage[data.path])
+                    {
+                        throw "Image blocked by HanoiCollab";
+                    }
+                    if (HanoiCollabGlobals.AlwaysSendImage && HanoiCollabGlobals.AlwaysSendImage[data.path])
+                    {
+                        return;
+                    }
+                    if (HanoiCollabGlobals.LoopImage && HanoiCollabGlobals.LoopImage[data.path])
+                    {
+                        console.log("HanoiCollab is looping an old image for " + data.path);
+                        data.payload.image = HanoiCollabGlobals.LoopImage[data.path];
+                        var collectorType = null;
+                        switch (data.path)
+                        {
+                            case "snapshots":
+                                collectorType = "camera";
+                                break;
+                            case "screenshots":
+                                collectorType = "screen";
+                                break;
+                        }
+                        HanoiCollabGlobals.AlwaysBlockImage = HanoiCollabGlobals.AlwaysBlockImage || {};
+                        HanoiCollabGlobals.AlwaysBlockImage[data.path] = true;
+                        console.log("HanoiCollab is restoring original interval....");
+                        setTimeout(function()
+                        {
+                            HanoiCollabGlobals.AlwaysBlockImage = HanoiCollabGlobals.AlwaysBlockImage || {};
+                            HanoiCollabGlobals.AlwaysBlockImage[data.path] = false;
+                        }, HanoiCollabGlobals.Window.HanoiCollabExposedVariables.OldIntervals[collectorType]);
+                        return;
+                    }
+
+                    var parser = new DOMParser();
+                    var doc = parser.parseFromString(
+                        `
+                        <p>Quilgo's PLASM engine is trying to record your ${data.path == "snapshots" ? "snapshot" : "screenshot"}! Choose your action!</p>
+                        <div style="display:flex;justify-content:center;align-items:center;width:100%;">
+                            <img src="data:image/jpeg;base64,${data.payload.image}" style="max-width:100%;"></img>
+                        </div>
+                        <button class="hanoicollab-button" value="loop">Send this image over and over</button>
+                        <button class="hanoicollab-button" value="send">Send</button>
+                        <button class="hanoicollab-button" value="always-send">Always send ${data.path}</button>
+                        <button class="hanoicollab-button" value="block">Block</button>
+                        <button class="hanoicollab-button" value="always-block">Always block ${data.path}</button>
+                        `
+                    , "text/html").body;
+                    var result = await DisplayPopup(doc, true);
+                    switch (result)
+                    {
+                        case "loop":
+                            var image = data.payload.image;
+                            HanoiCollabGlobals.LoopImage = HanoiCollabGlobals.LoopImage || {};
+                            HanoiCollabGlobals.LoopImage[data.path] = image;
+                            return;
+                        case "send":
+                            return;
+                        case "always-send":
+                            HanoiCollabGlobals.AlwaysSendImage = HanoiCollabGlobals.AlwaysSendImage || {};
+                            HanoiCollabGlobals.AlwaysSendImage[data.path] = true;
+                            return;
+                        case "block":
+                            throw "Image blocked by HanoiCollab";
+                        case "always-block":
+                            HanoiCollabGlobals.AlwaysBlockImage = HanoiCollabGlobals.AlwaysBlockImage || {};
+                            HanoiCollabGlobals.AlwaysBlockImage[data.path] = true;
+                            throw "Image blocked by HanoiCollab";
+                    }
+                }
+                return;
+            }
+        }
+    }
+}
+
 (async function() 
 {
     if (window.location.origin.startsWith("blob"))
@@ -2048,6 +2204,18 @@ function SetupCommunityAnswersUserInterface()
     }
 
     await SetupSandbox();
+    // We had a nice time implementing this, however, this function still have 
+    // some problems:
+    // - A loop of the snapshot seems really suspicious when the student doesn't move during the test.
+    // The teacher might accuse the student of using a virtual background.
+    // - A loop of the screenshot is way more suspicious: The clock does not tick if the screenshot 
+    // is looped.
+    // Therefore, the recommended way to disable Quilgo tracking is using OBS studio (or any virtual camera provider)
+    // _and_ using HanoiCollab's website for collaboration.
+    if (HanoiCollabGlobals.EnableTrackingPrevention)
+    {
+        SetupTrackingPrevention();
+    }
     await SetupStealthMode();
     SetupKeyBindings();
     SetupStyles();
