@@ -2271,7 +2271,7 @@ function SetupTaskbar()
         <p>
             <span>${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}</span>
             <br/>
-            <span>${d.getDate().toString().padStart(2, "0")}/${d.getMonth().toString().padStart(2, "0")}/${d.getFullYear()}</span>
+            <span>${d.getDate().toString().padStart(2, "0")}/${(d.getMonth() + 1).toString().padStart(2, "0")}/${d.getFullYear()}</span>
         </p>
     </div>
     <hr style="height:1px;position:absolute;top:0;width:100%;border-width:0px;background-color:rgb(213,223,233);margin:0;padding:0"></hr>
@@ -2313,12 +2313,12 @@ function SetupTaskbar()
         setInterval(function()
         {
             var d = new Date(Date.now());
-            HanoiCollab$("#hanoicollab-fake-taskbar-time").innerHTML = 
+            HanoiCollab$("#hanoicollab-fake-taskbar-time")[0].innerHTML = 
             `
             <p>
                 <span>${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}</span>
                 <br/>
-                <span>${d.getDate().toString().padStart(2, "0")}/${d.getMonth().toString().padStart(2, "0")}/${d.getFullYear()}</span>
+                <span>${d.getDate().toString().padStart(2, "0")}/${(d.getMonth() + 1).toString().padStart(2, "0")}/${d.getFullYear()}</span>
             </p>
             `
         }, 1000);
