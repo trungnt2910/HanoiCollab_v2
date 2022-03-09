@@ -2,7 +2,7 @@
 // @name         HanoiCollab_v2
 // @namespace    https://trungnt2910.github.io/
 // @version      0.0.1
-// @description  HanoiColab client for Second Generation HanoiCollab server
+// @description  HanoiCollab client for Second Generation HanoiCollab server
 // @author       trungnt2910
 // @license      MIT
 // @icon         https://www.google.com/s2/favicons?domain=edu.vn
@@ -32,7 +32,29 @@ String.prototype.getHashCode = function() {
     return hash.toString();
 };
 
+var GUID = function () {
+    //------------------
+    var S4 = function () {
+        return(
+                Math.floor(
+                        Math.random() * 0x10000 /* 65536 */
+                    ).toString(16)
+            );
+    };
+    //------------------
+
+    return (
+            S4() + S4() + "-" +
+            S4() + "-" +
+            S4() + "-" +
+            S4() + "-" +
+            S4() + S4() + S4()
+        );
+};
+
 let HanoiCollabGlobals = {};
+
+HanoiCollabGlobals.WindowId = GUID();
 
 function HanoiCollab$(obj)
 {
@@ -788,6 +810,49 @@ function ToggleStealthMode()
     SetupStealthMode(true);
 }
 
+function SynchronizeStealthMode(originId)
+{
+    originId = originId || HanoiCollabGlobals.WindowId;
+    // Stealth mode synchronization
+    if (window.parent)
+    {
+        window.parent.postMessage({
+            Type: "HanoiCollabStealthMode",
+            Value: HanoiCollabGlobals.IsSteathMode,
+            OriginId: originId
+        }, "*");
+    }
+    for (var frame in document.querySelectorAll("iframe"))
+    {
+        frame.contentWindow?.postMessage({
+            Type: "HanoiCollabStealthMode",
+            Value: HanoiCollabGlobals.IsSteathMode,
+            OriginId: originId
+        }, "*");
+    }
+}
+
+window.addEventListener("message", function(event)
+{
+    var msg = event.data;
+    if (msg.Type === "HanoiCollabStealthMode")
+    {
+        if (msg.OriginId == HanoiCollabGlobals.WindowId)
+        {
+            return;
+        }
+        console.log(window.location.href + ": Received stealth mode message: " + msg.Value + " from " + msg.OriginId);
+        HanoiCollabGlobals.IsSteathMode = msg.Value;
+        SetupStealthMode(true);
+        SynchronizeStealthMode(msg.OriginId);
+    }
+});
+
+HanoiCollabGlobals.ChildProviders = 
+{
+    "quilgo.com": ["docs.google.com"]
+};
+
 async function SetupStealthMode(init = false)
 {
     if (!init)
@@ -806,6 +871,11 @@ async function SetupStealthMode(init = false)
         }
         HanoiCollabGlobals.StealthModeConfig = stealthModeConfig;
     }
+    // Probably a hosted iframe where HanoiCollab is disabled.
+    if (!HanoiCollabGlobals.Document)
+    {
+        return;
+    }
     if (HanoiCollabGlobals.IsSteathMode)
     {
         AppendStealthModeStyle();
@@ -816,6 +886,12 @@ async function SetupStealthMode(init = false)
         RemoveStealthModeStyle();
         HanoiCollabGlobals.StealthModeConfig[HanoiCollabGlobals.Provider] = false;
     }
+    // Sync with children
+    for (var child of (HanoiCollabGlobals.ChildProviders || {})[HanoiCollabGlobals.Provider] || [])
+    {
+        HanoiCollabGlobals.StealthModeConfig[child] = HanoiCollabGlobals.IsSteathMode;
+    }
+    SynchronizeStealthMode();
     await GM_setValue("HanoiCollabStealthConfig", JSON.stringify(HanoiCollabGlobals.StealthModeConfig));
 }
 
