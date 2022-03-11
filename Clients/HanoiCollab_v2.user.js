@@ -6,8 +6,8 @@
 // @author       trungnt2910
 // @license      MIT
 // @icon         https://www.google.com/s2/favicons?domain=edu.vn
-// @downloadURL  https://raw.githubusercontent.com/trungnt2910/HanoiCollab_v2/master/Clients/HanoiCollab_v2.user.js
-// @updateURL    https://raw.githubusercontent.com/trungnt2910/HanoiCollab_v2/master/Clients/HanoiCollab_v2.meta.js
+// @downloadURL  https://raw.githubusercontent.com/trungnt2910/HanoiCollab_v2/release/0.0/Clients/HanoiCollab_v2.user.js
+// @updateURL    https://raw.githubusercontent.com/trungnt2910/HanoiCollab_v2/release/0.0/Clients/HanoiCollab_v2.meta.js
 // @connect      *
 // @grant        GM_xmlhttpRequest
 // @grant        GM_getValue
