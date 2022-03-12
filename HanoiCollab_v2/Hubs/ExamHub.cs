@@ -89,6 +89,12 @@ namespace HanoiCollab.Hubs
             await Clients.User(GetUserName()).SendAsync("BroadcastExamLayout", examId, layout);
         }
 
+        [Authorize]
+        public async Task BroadcastExamLayoutPartial(string examId, string broadcastId, int chunkIndex, int totalChunks, string layout)
+        {
+            await Clients.User(GetUserName()).SendAsync("BroadcastExamLayoutPartial", examId, broadcastId, chunkIndex, totalChunks, layout);
+        }
+
         private string GetUserName()
         {
             return Context.User.FindFirst(ClaimTypes.Name)?.Value ?? "Anonymous";

@@ -2,6 +2,7 @@
 
 @using HanoiCollab.Models
 @using Microsoft.AspNetCore.SignalR.Client
+@using System.Text.Json
 @using blazejewicz.Blazor.BeforeUnload
 
 @implements IAsyncDisposable
@@ -42,6 +43,9 @@
         }
     }
     private string _activeExam;
+    private string _activeBroadcastId;
+    private string[] _activeBroadcastChunks;
+    private int _activeBroadcastChunksLeft;
     private string _selectedExam;
     object SelectedExam 
     {
@@ -95,6 +99,7 @@
             .Build();
 
         _connection.On<string, ExamLayout>("BroadcastExamLayout", UpdateExamLayout);
+        _connection.On<string, string, int, int, string>("BroadcastExamLayoutPartial", ReceiveExamLayout);
 
         _connection.On<List<Question>>("InitializeExam", InitializeExam);
         _connection.On<QuestionUpdateInfo>("ReceiveAnswer", ReceiveAnswer);
@@ -115,12 +120,44 @@
         await _connection.SendAsync("RequestExamLayout", _selectedExam);
     }
 
+    private async Task ReceiveExamLayout(string examId, string broadcastId, int chunkIndex, int totalChunks, string data)
+    {
+        if (examId != _activeExam)
+        {
+            return;
+        }
+        if (_activeBroadcastId != null && _activeBroadcastId != broadcastId)
+        {
+            return;
+        }
+        if (_activeBroadcastId == null)
+        {
+            _activeBroadcastId = broadcastId;
+            _activeBroadcastChunks = new string[totalChunks];
+            _activeBroadcastChunksLeft = totalChunks;
+        }
+        if (_activeBroadcastChunks[chunkIndex] == null)
+        {
+            _activeBroadcastChunks[chunkIndex] = data;
+            --_activeBroadcastChunksLeft;
+        }
+        if (_activeBroadcastChunksLeft == 0)
+        {
+            await UpdateExamLayout(examId, JsonSerializer.Deserialize<ExamLayout>(string.Join("", _activeBroadcastChunks)));
+        }
+    }
+
     private async Task UpdateExamLayout(string examId, ExamLayout questions)
     {
         if (examId != _activeExam)
         {
             return;
         }
+
+        _activeBroadcastId = null;        
+        _activeBroadcastChunks = null;
+        _activeBroadcastChunksLeft = 0;
+
         ExamLayout = questions;
         await _connection.InvokeAsync("JoinExam", examId);
     }
