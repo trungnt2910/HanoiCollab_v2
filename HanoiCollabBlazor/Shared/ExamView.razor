@@ -59,11 +59,17 @@
 
     public void ReceiveQuestionUpdate(Question q)
     {
-        _communityAnswers[_idToIndex[q.QuestionId]].Update(q);
+        if (_idToIndex.TryGetValue(q.QuestionId, out var index))
+        {
+            _communityAnswers[index].Update(q);
+        }
     }
 
     public void ReceiveQuestionUpdate(QuestionUpdateInfo q)
     {
-        _communityAnswers[_idToIndex[q.QuestionId]].Update(q);
+        if (_idToIndex.TryGetValue(q.QuestionId, out var index))
+        {
+            _communityAnswers[index].Update(q);
+        }
     }
 }
