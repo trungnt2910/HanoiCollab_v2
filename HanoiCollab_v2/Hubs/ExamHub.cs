@@ -72,6 +72,12 @@ namespace HanoiCollab.Hubs
         }
 
         [Authorize]
+        public async Task Ping(string examId, string pingType, string details)
+        {
+            await Clients.Group(examId).SendAsync("Ping", GetUserName(), pingType, details);
+        }
+
+        [Authorize]
         public Task<List<string>> GetActiveExams()
         {
             return Task.FromResult(_examService.GetActiveExams(GetUserName())?.ToList() ?? new List<string>());
