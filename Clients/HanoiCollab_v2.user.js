@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         HanoiCollab_v2
 // @namespace    https://trungnt2910.github.io/
-// @version      0.0.4
+// @version      0.0.5
 // @description  HanoiCollab client for Second Generation HanoiCollab server
 // @author       trungnt2910
 // @license      MIT
@@ -1023,7 +1023,7 @@ function GetFormId()
         case "azota.vn":
             return "" + HanoiCollabGlobals.Window.HanoiCollabExposedVariables.FormState.exam_obj.id;
         case "forms.office.com":
-            return "" + HanoiCollabGlobals.Window.HanoiCollabExposedVariables.FormState.$$.$H;
+            return "" + HanoiCollabGlobals.Window.HanoiCollabExposedVariables.FormState.$$.$I;
         case "shub.edu.vn":
             return "" + top.location.href.match(/homework\/([\d]+?)\/test/)[1];
         case "docs.google.com":
@@ -1299,7 +1299,7 @@ function GetQuestions()
         {
             var result = [];
             var elements = HanoiCollab$(".office-form-question-content");
-            var questions = HanoiCollabGlobals.Window.HanoiCollabExposedVariables.FormState.$$.$e;
+            var questions = HanoiCollabGlobals.Window.HanoiCollabExposedVariables.FormState.$$.$f;
 
             for (let i = 0; i < elements.length; ++i)
             {
@@ -1310,7 +1310,7 @@ function GetQuestions()
                 info.GetUserAnswer = function()
                 {
                     var info = this;
-                    var content = HanoiCollabGlobals.Window.HanoiCollabExposedVariables.FormState.$$.$e[info.Id].runtime.$c;
+                    var content = HanoiCollabGlobals.Window.HanoiCollabExposedVariables.FormState.$$.$f[info.Id].runtime.$e;
                     if (!content || content.length == 0)
                     {
                         return null;
@@ -1346,7 +1346,7 @@ function GetQuestions()
                     info.ClearUserAnswer = function()
                     {
                         var info = this;
-                        HanoiCollabGlobals.Window.HanoiCollabExposedVariables.FormState.$$.$e[info.Id].runtime.$c = [];
+                        HanoiCollabGlobals.Window.HanoiCollabExposedVariables.FormState.$$.$f[info.Id].runtime.$e = [];
                         for (var input of info.HtmlElement.getElementsByTagName("input"))
                         {
                             input.checked = false;
@@ -1364,7 +1364,7 @@ function GetQuestions()
                     info.ClearUserAnswer = function()
                     {
                         var info = this;
-                        HanoiCollabGlobals.Window.HanoiCollabExposedVariables.FormState.$$.$e[info.Id].runtime.$c = "";
+                        HanoiCollabGlobals.Window.HanoiCollabExposedVariables.FormState.$$.$f[info.Id].runtime.$e = "";
                         for (var input of info.HtmlElement.getElementsByTagName("input"))
                         {
                             input.value = "";
@@ -1761,7 +1761,7 @@ class ExamLayout
             {
                 var result = [];
                 var elements = HanoiCollab$(".office-form-question-content");
-                var questions = HanoiCollabGlobals.Window.HanoiCollabExposedVariables.FormState.$$.$e;
+                var questions = HanoiCollabGlobals.Window.HanoiCollabExposedVariables.FormState.$$.$f;
     
                 for (let i = 0; i < elements.length; ++i)
                 {
