@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         HanoiCollab_v2
 // @namespace    https://trungnt2910.github.io/
-// @version      0.0.5
+// @version      0.0.6
 // @description  HanoiCollab client for Second Generation HanoiCollab server
 // @author       trungnt2910
 // @license      MIT
@@ -1023,7 +1023,7 @@ function GetFormId()
         case "azota.vn":
             return "" + HanoiCollabGlobals.Window.HanoiCollabExposedVariables.FormState.exam_obj.id;
         case "forms.office.com":
-            return "" + HanoiCollabGlobals.Window.HanoiCollabExposedVariables.FormState.$$.$I;
+            return "" + HanoiCollabGlobals.Window.HanoiCollabExposedVariables.FormState.$$.$G;
         case "shub.edu.vn":
             return "" + top.location.href.match(/homework\/([\d]+?)\/test/)[1];
         case "docs.google.com":
