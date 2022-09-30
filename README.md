@@ -1,4 +1,5 @@
-# HanoiCollab_v2 - Real-time quiz collaboration solution for small teams
+# HanoiCollab userscript
 
-## Community
-If you have any problems setting up HanoiCollab's client and/or server, would like quick support from HanoiCollab's developers, or just want to hang out with fellow users, don't hesitate to join our [Discord server](https://discord.gg/tDsux9HWPr).
+This folder contains compiled webpacks hosted for distribution.
+
+For the userscript's source code, please access [this repository](https://github.com/trungnt2910/HanoiCollab_v2_script).
